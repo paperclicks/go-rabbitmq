@@ -1,0 +1,267 @@
+package rabbitmq
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"time"
+
+	"github.com/paperclicks/golog"
+	"github.com/streadway/amqp"
+)
+
+var conn *amqp.Connection
+var ch *amqp.Channel
+
+//RabbitMQ is a concrete instance of the package
+type RabbitMQ struct {
+	Conn      *amqp.Connection
+	URI       string
+	Gologger  *golog.Golog
+	Queues    map[string]QueueInfo
+	ErrorChan chan *amqp.Error
+	closed    bool
+}
+
+type QueueInfo struct {
+	Name       string
+	Durable    bool
+	AutoDelete bool
+	Exclusive  bool
+	NoWait     bool
+	Args       amqp.Table
+}
+
+func failOnError(err error, msg string) {
+	if err != nil {
+		panic(fmt.Sprintf("%s: %s", msg, err))
+	}
+}
+
+//New creates a new instance of RabbitMQ
+func New(uri string, qInfo map[string]QueueInfo, output io.Writer) *RabbitMQ {
+
+	rmq := &RabbitMQ{URI: uri, Queues: qInfo}
+
+	gologger := golog.New(output)
+	gologger.ShowCallerInfo = true
+	rmq.Gologger = gologger
+
+	rmq.connect(uri)
+
+	//rmq.declare(qInfo)
+
+	//launch a goroutine that will listen for messages on ErrorChan and try to reconnect in case of errors
+	go rmq.reconnector()
+
+	return rmq
+}
+
+func (rmq *RabbitMQ) connect(uri string) {
+
+	rmq.Gologger.Info("Connecting to RabbitMQ...")
+
+	for {
+
+		conn, err := amqp.Dial(uri)
+
+		if err == nil {
+
+			//crete the error chan
+			rmq.ErrorChan = make(chan *amqp.Error)
+
+			rmq.Conn = conn
+
+			//notify all close signals on ErrorChan so that a reconnect can be retried
+			rmq.Conn.NotifyClose(rmq.ErrorChan)
+
+			rmq.Gologger.Info("Connection successful.")
+
+			return
+		}
+
+		rmq.Gologger.Info("Failed to connect to %s %v! \nRetrying in 5s...", uri, err)
+		time.Sleep(5000 * time.Millisecond)
+
+	}
+
+}
+
+func (rmq *RabbitMQ) reconnector() {
+	for {
+		err := <-rmq.ErrorChan
+		if !rmq.closed {
+			rmq.Gologger.Info("Reconnecting after connection closed", err)
+
+			rmq.connect(rmq.URI)
+		}
+	}
+}
+
+func (rmq *RabbitMQ) Close() {
+
+	rmq.Gologger.Info("RabbitMQ closing connection")
+	rmq.closed = true
+	rmq.Conn.Close()
+}
+
+//Publish publishes a message to a queue
+func (rmq *RabbitMQ) Publish(queue string, body string) error {
+
+	//create ch and declare its topology
+	ch, err := rmq.Channel(1, 0, false)
+
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create channel %v", err))
+
+	}
+	defer ch.Close()
+
+	//declare the queue
+	q, err := ch.QueueDeclare(
+		rmq.Queues[queue].Name,       // name
+		rmq.Queues[queue].Durable,    // durable
+		rmq.Queues[queue].AutoDelete, // delete when unused
+		rmq.Queues[queue].Exclusive,  // exclusive
+		rmq.Queues[queue].NoWait,     // no-wait
+		rmq.Queues[queue].Args,       // arguments
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to declare queue [%s] - %v", rmq.Queues[queue].Name, err))
+	}
+
+	//publish
+	headersTable := make(amqp.Table)
+
+	headersTable["json"] = true
+
+	err = ch.Publish(
+		"",     // exchange
+		q.Name, // routing key
+		false,  // mandatory
+		false,  // immediate
+		amqp.Publishing{
+			Headers:     headersTable,
+			ContentType: "text/plain",
+			Body:        []byte(body),
+		})
+
+	if err != nil {
+		rmq.Gologger.Error("Failed to publish a message: %s", err)
+		return err
+	}
+
+	rmq.Gologger.Info("Publishing message to [%s] - %s", q.Name, body)
+
+	return nil
+}
+
+func (rmq *RabbitMQ) Channel(prefetch int, prefSize int, global bool) (*amqp.Channel, error) {
+
+	//create ch and declare its topology
+	ch, err := rmq.Conn.Channel()
+
+	if err != nil {
+		rmq.Gologger.Error("Failed to open a channel %v", err)
+		return ch, err
+
+	}
+
+	err = ch.Qos(
+		prefetch, // prefetch count
+		prefSize, // prefetch size
+		global,   // global
+	)
+	if err != nil {
+		rmq.Gologger.Error("Failed to set channel QOS %v", err)
+		return ch, err
+	}
+	return ch, nil
+}
+
+//Status checks the connection status of RabbitMQ by publishing and then receiving a message from a test queue
+func (rmq *RabbitMQ) Status(queue string) (string, error) {
+
+	rmq.Gologger.Info("Check status using queue [%s]", rmq.Queues[queue].Name)
+
+	//create ch and declare its topology
+	ch, err := rmq.Channel(1, 0, false)
+
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create channel %v", err))
+
+	}
+	defer ch.Close()
+
+	//publish a message to test connection queue
+	err = rmq.Publish(queue, "Ping")
+
+	if err != nil {
+		rmq.Gologger.Error("Error publishing message to queue [%s] %v", rmq.Queues[queue].Name, err)
+		return "ERROR", err
+	}
+
+	//register a consumer to test connection queue
+	testConsumerCH, err := ch.Consume(
+		rmq.Queues[queue].Name, // queue
+		"test-consumer",        // consumer
+		false,                  // auto-ack
+		false,                  // exclusive
+		false,                  // no-local
+		false,                  // no-wait
+		nil,                    // args
+	)
+	if err != nil {
+		rmq.Gologger.Error("Failed to register consumer on test queue: %v", err)
+
+	}
+
+	//Use a select with timout 10s on the channel to check for messages.
+	//if after 10s no messages have been received, return with an error.
+	select {
+	case d := <-testConsumerCH:
+
+		d.Ack(true)
+		rmq.Gologger.Info("Pong")
+		return "OK", nil
+
+	case <-time.After(60 * time.Second):
+
+		rmq.Gologger.Error("Operation timed out after 60 sec")
+		return "ERROR", errors.New("Rabbit status check timed out after 60 seconds")
+	}
+
+}
+
+func (rmq *RabbitMQ) Consume(ch *amqp.Channel, queue string, name string) (<-chan amqp.Delivery, error) {
+
+	//declare the queue to avoid NOT FOUND errors
+	_, err := ch.QueueDeclare(
+		rmq.Queues[queue].Name,       // name
+		rmq.Queues[queue].Durable,    // durable
+		rmq.Queues[queue].AutoDelete, // delete when unused
+		rmq.Queues[queue].Exclusive,  // exclusive
+		rmq.Queues[queue].NoWait,     // no-wait
+		rmq.Queues[queue].Args,       // arguments
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to declare queue [%s] - %v", rmq.Queues[queue].Name, err))
+	}
+
+	//initialize consumer
+	msgs, err := ch.Consume(
+		rmq.Queues[queue].Name, // queue
+		name,  // consumer
+		false, // auto-ack
+		false, // exclusive
+		false, // no-local
+		false, // no-wait
+		nil,   // args
+	)
+	if err != nil {
+		rmq.Gologger.Error("Failed to register %s: %v", name, err)
+		return msgs, err
+	}
+
+	return msgs, nil
+}
