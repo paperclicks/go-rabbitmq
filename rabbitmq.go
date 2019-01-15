@@ -3,10 +3,8 @@ package rabbitmq
 import (
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
-	"github.com/paperclicks/golog"
 	"github.com/streadway/amqp"
 )
 
@@ -17,7 +15,6 @@ var ch *amqp.Channel
 type RabbitMQ struct {
 	Conn      *amqp.Connection
 	URI       string
-	Gologger  *golog.Golog
 	Queues    map[string]QueueInfo
 	ErrorChan chan *amqp.Error
 	closed    bool
@@ -39,17 +36,11 @@ func failOnError(err error, msg string) {
 }
 
 //New creates a new instance of RabbitMQ
-func New(uri string, qInfo map[string]QueueInfo, output io.Writer) *RabbitMQ {
+func New(uri string, qInfo map[string]QueueInfo) *RabbitMQ {
 
 	rmq := &RabbitMQ{URI: uri, Queues: qInfo}
 
-	gologger := golog.New(output)
-	gologger.ShowCallerInfo = true
-	rmq.Gologger = gologger
-
 	rmq.connect(uri)
-
-	//rmq.declare(qInfo)
 
 	//launch a goroutine that will listen for messages on ErrorChan and try to reconnect in case of errors
 	go rmq.reconnector()
@@ -59,7 +50,7 @@ func New(uri string, qInfo map[string]QueueInfo, output io.Writer) *RabbitMQ {
 
 func (rmq *RabbitMQ) connect(uri string) {
 
-	rmq.Gologger.Info("Connecting to RabbitMQ...")
+	fmt.Println("Connecting to RabbitMQ...")
 
 	for {
 
@@ -75,12 +66,12 @@ func (rmq *RabbitMQ) connect(uri string) {
 			//notify all close signals on ErrorChan so that a reconnect can be retried
 			rmq.Conn.NotifyClose(rmq.ErrorChan)
 
-			rmq.Gologger.Info("Connection successful.")
+			fmt.Println("Connection successful.")
 
 			return
 		}
 
-		rmq.Gologger.Info("Failed to connect to %s %v! \nRetrying in 5s...", uri, err)
+		fmt.Printf("Failed to connect to %s %v! \nRetrying in 5s...", uri, err)
 		time.Sleep(5000 * time.Millisecond)
 
 	}
@@ -91,7 +82,7 @@ func (rmq *RabbitMQ) reconnector() {
 	for {
 		err := <-rmq.ErrorChan
 		if !rmq.closed {
-			rmq.Gologger.Info("Reconnecting after connection closed", err)
+			fmt.Printf("Reconnecting after connection closed: %v\n", err)
 
 			rmq.connect(rmq.URI)
 		}
@@ -100,7 +91,7 @@ func (rmq *RabbitMQ) reconnector() {
 
 func (rmq *RabbitMQ) Close() {
 
-	rmq.Gologger.Info("RabbitMQ closing connection")
+	fmt.Println("RabbitMQ closing connection")
 	rmq.closed = true
 	rmq.Conn.Close()
 }
@@ -147,11 +138,8 @@ func (rmq *RabbitMQ) Publish(queue string, body string) error {
 		})
 
 	if err != nil {
-		rmq.Gologger.Error("Failed to publish a message: %s", err)
-		return err
+		return fmt.Errorf("Failed to publish a message: %s", err)
 	}
-
-	rmq.Gologger.Info("Publishing message to [%s] - %s", q.Name, body)
 
 	return nil
 }
@@ -162,8 +150,8 @@ func (rmq *RabbitMQ) Channel(prefetch int, prefSize int, global bool) (*amqp.Cha
 	ch, err := rmq.Conn.Channel()
 
 	if err != nil {
-		rmq.Gologger.Error("Failed to open a channel %v", err)
-		return ch, err
+
+		return ch, fmt.Errorf("Failed to open a channel %v", err)
 
 	}
 
@@ -173,16 +161,14 @@ func (rmq *RabbitMQ) Channel(prefetch int, prefSize int, global bool) (*amqp.Cha
 		global,   // global
 	)
 	if err != nil {
-		rmq.Gologger.Error("Failed to set channel QOS %v", err)
-		return ch, err
+
+		return ch, fmt.Errorf("Failed to set channel QOS %v", err)
 	}
 	return ch, nil
 }
 
 //Status checks the connection status of RabbitMQ by publishing and then receiving a message from a test queue
 func (rmq *RabbitMQ) Status(queue string) (string, error) {
-
-	rmq.Gologger.Info("Check status using queue [%s]", rmq.Queues[queue].Name)
 
 	//create ch and declare its topology
 	ch, err := rmq.Channel(1, 0, false)
@@ -197,7 +183,6 @@ func (rmq *RabbitMQ) Status(queue string) (string, error) {
 	err = rmq.Publish(queue, "Ping")
 
 	if err != nil {
-		rmq.Gologger.Error("Error publishing message to queue [%s] %v", rmq.Queues[queue].Name, err)
 		return "ERROR", err
 	}
 
@@ -212,7 +197,7 @@ func (rmq *RabbitMQ) Status(queue string) (string, error) {
 		nil,                    // args
 	)
 	if err != nil {
-		rmq.Gologger.Error("Failed to register consumer on test queue: %v", err)
+		fmt.Printf("Failed to register consumer on test queue: %v\n", err)
 
 	}
 
@@ -222,12 +207,11 @@ func (rmq *RabbitMQ) Status(queue string) (string, error) {
 	case d := <-testConsumerCH:
 
 		d.Ack(true)
-		rmq.Gologger.Info("Pong")
+		fmt.Println("Pong")
 		return "OK", nil
 
 	case <-time.After(60 * time.Second):
 
-		rmq.Gologger.Error("Operation timed out after 60 sec")
 		return "ERROR", errors.New("Rabbit status check timed out after 60 seconds")
 	}
 
@@ -259,8 +243,7 @@ func (rmq *RabbitMQ) Consume(ch *amqp.Channel, queue string, name string) (<-cha
 		nil,   // args
 	)
 	if err != nil {
-		rmq.Gologger.Error("Failed to register %s: %v", name, err)
-		return msgs, err
+		return msgs, fmt.Errorf("Failed to register %s: %v", name, err)
 	}
 
 	return msgs, nil
