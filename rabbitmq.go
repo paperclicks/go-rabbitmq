@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -71,7 +72,7 @@ func (rmq *RabbitMQ) connect(uri string) {
 			return
 		}
 
-		fmt.Printf("Failed to connect to %s %v! \nRetrying in 5s...", uri, err)
+		log.Printf("Failed to connect to %s %v! \nRetrying in 5s...", uri, err)
 		time.Sleep(5000 * time.Millisecond)
 
 	}
@@ -82,7 +83,7 @@ func (rmq *RabbitMQ) reconnector() {
 	for {
 		err := <-rmq.ErrorChan
 		if !rmq.closed {
-			fmt.Printf("Reconnecting after connection closed: %v\n", err)
+			log.Printf("Reconnecting after connection closed: %v\n", err)
 
 			rmq.connect(rmq.URI)
 		}
@@ -91,7 +92,7 @@ func (rmq *RabbitMQ) reconnector() {
 
 func (rmq *RabbitMQ) Close() {
 
-	fmt.Println("RabbitMQ closing connection")
+	log.Println("RabbitMQ closing connection")
 	rmq.closed = true
 	rmq.Conn.Close()
 }
@@ -197,7 +198,7 @@ func (rmq *RabbitMQ) Status(queue string) (string, error) {
 		nil,                    // args
 	)
 	if err != nil {
-		fmt.Printf("Failed to register consumer on test queue: %v\n", err)
+		log.Printf("Failed to register consumer on test queue: %v\n", err)
 
 	}
 
