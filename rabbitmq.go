@@ -145,6 +145,56 @@ func (rmq *RabbitMQ) Publish(queue string, body string) error {
 	return nil
 }
 
+//PublishRPC publishes a message to a queue using rpc pattern
+func (rmq *RabbitMQ) PublishRPC(queue string, body string, replyTo string, correlationID string) error {
+
+	//create ch and declare its topology
+	ch, err := rmq.Channel(1, 0, false)
+
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create channel %v", err))
+
+	}
+	defer ch.Close()
+
+	//declare the queue
+	q, err := ch.QueueDeclare(
+		rmq.Queues[queue].Name,       // name
+		rmq.Queues[queue].Durable,    // durable
+		rmq.Queues[queue].AutoDelete, // delete when unused
+		rmq.Queues[queue].Exclusive,  // exclusive
+		rmq.Queues[queue].NoWait,     // no-wait
+		rmq.Queues[queue].Args,       // arguments
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to declare queue [%s] - %v", rmq.Queues[queue].Name, err))
+	}
+
+	//publish
+	headersTable := make(amqp.Table)
+
+	headersTable["json"] = true
+
+	err = ch.Publish(
+		"",     // exchange
+		q.Name, // routing key
+		false,  // mandatory
+		false,  // immediate
+		amqp.Publishing{
+			ReplyTo:       replyTo,
+			CorrelationId: correlationID,
+			Headers:       headersTable,
+			ContentType:   "text/plain",
+			Body:          []byte(body),
+		})
+
+	if err != nil {
+		return fmt.Errorf("Failed to publish a message: %s", err)
+	}
+
+	return nil
+}
+
 func (rmq *RabbitMQ) Channel(prefetch int, prefSize int, global bool) (*amqp.Channel, error) {
 
 	//create ch and declare its topology
