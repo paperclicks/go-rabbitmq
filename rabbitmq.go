@@ -20,6 +20,7 @@ type RabbitMQ struct {
 	ErrorChan     chan *amqp.Error
 	closed        bool
 	ReconnectChan chan struct{}
+	reconnection  bool
 }
 
 type QueueInfo struct {
@@ -40,7 +41,7 @@ func failOnError(err error, msg string) {
 //New creates a new instance of RabbitMQ
 func New(uri string, qInfo map[string]QueueInfo) *RabbitMQ {
 	reconnectChan := make(chan struct{})
-	rmq := &RabbitMQ{URI: uri, Queues: qInfo, ReconnectChan: reconnectChan}
+	rmq := &RabbitMQ{URI: uri, Queues: qInfo, ReconnectChan: reconnectChan, reconnection: false}
 
 	rmq.connect(uri)
 
@@ -70,13 +71,19 @@ func (rmq *RabbitMQ) connect(uri string) {
 
 			fmt.Println("Connection successful.")
 
+			//set reconnection to true so all successive reconnections are not considered as the first connection
+			if !rmq.reconnection {
+				rmq.reconnection = true
+				return
+			}
+
 			//publish a reconnect signal so that all the clients interested to perform actions after a reconnect can use this channel
 			rmq.ReconnectChan <- struct{}{}
 
 			return
 		}
 
-		log.Printf("Failed to connect to %s %v! \nRetrying in 5s...", uri, err)
+		log.Printf("Failed to connect to %s %v!\nRetrying in 5s...", uri, err)
 		time.Sleep(5000 * time.Millisecond)
 
 	}
