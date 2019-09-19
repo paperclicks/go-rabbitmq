@@ -14,11 +14,12 @@ var ch *amqp.Channel
 
 //RabbitMQ is a concrete instance of the package
 type RabbitMQ struct {
-	Conn      *amqp.Connection
-	URI       string
-	Queues    map[string]QueueInfo
-	ErrorChan chan *amqp.Error
-	closed    bool
+	Conn          *amqp.Connection
+	URI           string
+	Queues        map[string]QueueInfo
+	ErrorChan     chan *amqp.Error
+	closed        bool
+	ReconnectChan chan struct{}
 }
 
 type QueueInfo struct {
@@ -38,8 +39,8 @@ func failOnError(err error, msg string) {
 
 //New creates a new instance of RabbitMQ
 func New(uri string, qInfo map[string]QueueInfo) *RabbitMQ {
-
-	rmq := &RabbitMQ{URI: uri, Queues: qInfo}
+	reconnectChan := make(chan struct{})
+	rmq := &RabbitMQ{URI: uri, Queues: qInfo, ReconnectChan: reconnectChan}
 
 	rmq.connect(uri)
 
@@ -68,6 +69,9 @@ func (rmq *RabbitMQ) connect(uri string) {
 			rmq.Conn.NotifyClose(rmq.ErrorChan)
 
 			fmt.Println("Connection successful.")
+
+			//publish a reconnect signal so that all the clients interested to perform actions after a reconnect can use this channel
+			rmq.ReconnectChan <- struct{}{}
 
 			return
 		}
@@ -286,12 +290,12 @@ func (rmq *RabbitMQ) Consume(ch *amqp.Channel, queue string, name string) (<-cha
 	//initialize consumer
 	msgs, err := ch.Consume(
 		rmq.Queues[queue].Name, // queue
-		name,  // consumer
-		false, // auto-ack
-		false, // exclusive
-		false, // no-local
-		false, // no-wait
-		nil,   // args
+		name,                   // consumer
+		false,                  // auto-ack
+		false,                  // exclusive
+		false,                  // no-local
+		false,                  // no-wait
+		nil,                    // args
 	)
 	if err != nil {
 		return msgs, fmt.Errorf("Failed to register %s: %v", name, err)
