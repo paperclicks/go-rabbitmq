@@ -32,12 +32,6 @@ type QueueInfo struct {
 	Args       amqp.Table
 }
 
-func failOnError(err error, msg string) {
-	if err != nil {
-		panic(fmt.Sprintf("%s: %s", msg, err))
-	}
-}
-
 //New creates a new instance of RabbitMQ
 func New(uri string, qInfo map[string]QueueInfo) *RabbitMQ {
 	reconnectChan := make(chan struct{})
@@ -115,7 +109,7 @@ func (rmq *RabbitMQ) Publish(queue string, body string) error {
 	ch, err := rmq.Channel(1, 0, false)
 
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create channel %v", err))
+		return err
 
 	}
 	defer ch.Close()
@@ -130,7 +124,7 @@ func (rmq *RabbitMQ) Publish(queue string, body string) error {
 		rmq.Queues[queue].Args,       // arguments
 	)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to declare queue [%s] - %v", rmq.Queues[queue].Name, err))
+		return err
 	}
 
 	//publish
@@ -150,7 +144,7 @@ func (rmq *RabbitMQ) Publish(queue string, body string) error {
 		})
 
 	if err != nil {
-		return fmt.Errorf("Failed to publish a message: %s", err)
+		return err
 	}
 
 	return nil
@@ -163,7 +157,7 @@ func (rmq *RabbitMQ) PublishRPC(queue string, body string, replyTo string, corre
 	ch, err := rmq.Channel(1, 0, false)
 
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create channel %v", err))
+		return err
 
 	}
 	defer ch.Close()
@@ -178,7 +172,7 @@ func (rmq *RabbitMQ) PublishRPC(queue string, body string, replyTo string, corre
 		rmq.Queues[queue].Args,       // arguments
 	)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to declare queue [%s] - %v", rmq.Queues[queue].Name, err))
+		return err
 	}
 
 	//publish
@@ -200,7 +194,7 @@ func (rmq *RabbitMQ) PublishRPC(queue string, body string, replyTo string, corre
 		})
 
 	if err != nil {
-		return fmt.Errorf("Failed to publish a message: %s", err)
+		return err
 	}
 
 	return nil
@@ -224,7 +218,7 @@ func (rmq *RabbitMQ) Channel(prefetch int, prefSize int, global bool) (*amqp.Cha
 	)
 	if err != nil {
 
-		return ch, fmt.Errorf("Failed to set channel QOS %v", err)
+		return ch, err
 	}
 	return ch, nil
 }
@@ -236,8 +230,7 @@ func (rmq *RabbitMQ) Status(queue string) (string, error) {
 	ch, err := rmq.Channel(1, 0, false)
 
 	if err != nil {
-		panic(fmt.Sprintf("Failed to create channel %v", err))
-
+		return "ERROR", err
 	}
 	defer ch.Close()
 
@@ -259,8 +252,7 @@ func (rmq *RabbitMQ) Status(queue string) (string, error) {
 		nil,                    // args
 	)
 	if err != nil {
-		log.Printf("Failed to register consumer on test queue: %v\n", err)
-
+		return "ERROR", err
 	}
 
 	//Use a select with timout 10s on the channel to check for messages.
@@ -269,7 +261,6 @@ func (rmq *RabbitMQ) Status(queue string) (string, error) {
 	case d := <-testConsumerCH:
 
 		d.Ack(true)
-		fmt.Println("Pong")
 		return "OK", nil
 
 	case <-time.After(60 * time.Second):
@@ -281,6 +272,8 @@ func (rmq *RabbitMQ) Status(queue string) (string, error) {
 
 func (rmq *RabbitMQ) Consume(ch *amqp.Channel, queue string, name string) (<-chan amqp.Delivery, error) {
 
+	var msgs <-chan amqp.Delivery
+
 	//declare the queue to avoid NOT FOUND errors
 	_, err := ch.QueueDeclare(
 		rmq.Queues[queue].Name,       // name
@@ -291,11 +284,11 @@ func (rmq *RabbitMQ) Consume(ch *amqp.Channel, queue string, name string) (<-cha
 		rmq.Queues[queue].Args,       // arguments
 	)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to declare queue [%s] - %v", rmq.Queues[queue].Name, err))
+		return msgs, err
 	}
 
 	//initialize consumer
-	msgs, err := ch.Consume(
+	msgs, err = ch.Consume(
 		rmq.Queues[queue].Name, // queue
 		name,                   // consumer
 		false,                  // auto-ack
