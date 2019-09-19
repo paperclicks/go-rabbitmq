@@ -71,9 +71,10 @@ func (rmq *RabbitMQ) connect(uri string) {
 				return
 			}
 
-			//publish a reconnect signal so that all the clients interested to perform actions after a reconnect can use this channel
-			rmq.ReconnectChan <- struct{}{}
+			//close reconnect chan so that all listeners are notified that a reconnection took place
+			close(rmq.ReconnectChan)
 
+			rmq.ReconnectChan = make(chan struct{})
 			return
 		}
 
