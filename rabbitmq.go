@@ -71,14 +71,15 @@ func (rmq *RabbitMQ) connect(uri string) {
 				return
 			}
 
-			//close reconnect chan so that all listeners are notified that a reconnection took place
-			close(rmq.ReconnectChan)
+			// //close reconnect chan so that all listeners are notified that a reconnection took place
+			// close(rmq.ReconnectChan)
 
-			rmq.ReconnectChan = make(chan struct{})
+			// rmq.ReconnectChan = make(chan struct{})
 			return
 		}
 
 		log.Printf("Failed to connect to %s %v!\nRetrying in 5s...", uri, err)
+
 		time.Sleep(5000 * time.Millisecond)
 
 	}
