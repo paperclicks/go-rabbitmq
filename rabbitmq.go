@@ -1,6 +1,7 @@
 package rabbitmq
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -14,13 +15,14 @@ var ch *amqp.Channel
 
 //RabbitMQ is a concrete instance of the package
 type RabbitMQ struct {
-	Conn          *amqp.Connection
-	URI           string
-	Queues        map[string]QueueInfo
-	ErrorChan     chan *amqp.Error
-	closed        bool
-	ReconnectChan chan struct{}
-	reconnection  bool
+	Conn                 *amqp.Connection
+	URI                  string
+	Queues               map[string]QueueInfo
+	ErrorChan            chan *amqp.Error
+	closed               bool
+	ConnectionContext    context.Context
+	reconnection         bool
+	connectionCancelFunc context.CancelFunc
 }
 
 type QueueInfo struct {
@@ -34,8 +36,9 @@ type QueueInfo struct {
 
 //New creates a new instance of RabbitMQ
 func New(uri string, qInfo map[string]QueueInfo) *RabbitMQ {
-	reconnectChan := make(chan struct{})
-	rmq := &RabbitMQ{URI: uri, Queues: qInfo, ReconnectChan: reconnectChan, reconnection: false}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	rmq := &RabbitMQ{URI: uri, Queues: qInfo, ConnectionContext: ctx, connectionCancelFunc: cancel, reconnection: false}
 
 	rmq.connect(uri)
 
@@ -71,10 +74,14 @@ func (rmq *RabbitMQ) connect(uri string) {
 				return
 			}
 
-			// //close reconnect chan so that all listeners are notified that a reconnection took place
-			// close(rmq.ReconnectChan)
+			//cancel the connection context to notify any listeners
+			rmq.connectionCancelFunc()
 
-			// rmq.ReconnectChan = make(chan struct{})
+			//renew the context
+			ctx, cancel := context.WithCancel(context.Background())
+			rmq.connectionCancelFunc = cancel
+			rmq.ConnectionContext = ctx
+
 			return
 		}
 
