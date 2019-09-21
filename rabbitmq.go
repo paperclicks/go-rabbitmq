@@ -21,7 +21,7 @@ type RabbitMQ struct {
 	ErrorChan            chan *amqp.Error
 	closed               bool
 	ConnectionContext    context.Context
-	reconnection         bool
+	reconnected          bool
 	connectionCancelFunc context.CancelFunc
 }
 
@@ -38,7 +38,7 @@ type QueueInfo struct {
 func New(uri string, qInfo map[string]QueueInfo) *RabbitMQ {
 
 	ctx, cancel := context.WithCancel(context.Background())
-	rmq := &RabbitMQ{URI: uri, Queues: qInfo, ConnectionContext: ctx, connectionCancelFunc: cancel, reconnection: false}
+	rmq := &RabbitMQ{URI: uri, Queues: qInfo, ConnectionContext: ctx, connectionCancelFunc: cancel, reconnected: false}
 
 	rmq.connect(uri)
 
@@ -50,7 +50,7 @@ func New(uri string, qInfo map[string]QueueInfo) *RabbitMQ {
 
 func (rmq *RabbitMQ) connect(uri string) {
 
-	fmt.Println("Connecting to RabbitMQ...")
+	log.Printf("Connecting to RabbitMQ...")
 
 	for {
 
@@ -66,18 +66,18 @@ func (rmq *RabbitMQ) connect(uri string) {
 			//notify all close signals on ErrorChan so that a reconnect can be retried
 			rmq.Conn.NotifyClose(rmq.ErrorChan)
 
-			fmt.Println("Connection successful.")
+			log.Printf("Connection successful.")
 
-			//set reconnection to true so all successive reconnections are not considered as the first connection
-			if !rmq.reconnection {
-				rmq.reconnection = true
+			//set reconnected to true so all successive reconnections are not considered as the first connection
+			if !rmq.reconnected {
+				rmq.reconnected = true
 				return
 			}
 
 			//cancel the connection context to notify any listeners
 			rmq.connectionCancelFunc()
 
-			//renew the context
+			//renew the context after reconnecting
 			ctx, cancel := context.WithCancel(context.Background())
 			rmq.connectionCancelFunc = cancel
 			rmq.ConnectionContext = ctx
@@ -85,7 +85,7 @@ func (rmq *RabbitMQ) connect(uri string) {
 			return
 		}
 
-		log.Printf("Failed to connect to %s %v!\nRetrying in 5s...", uri, err)
+		log.Printf("Failed to connect to %s %v! Retrying in 5s...", uri, err)
 
 		time.Sleep(5000 * time.Millisecond)
 
