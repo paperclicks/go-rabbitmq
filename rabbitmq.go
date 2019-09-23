@@ -111,6 +111,9 @@ func (rmq *RabbitMQ) Close() {
 	rmq.Conn.Close()
 }
 
+//Consumer is a func type that can be used to process a Delivery
+type Consumer func(d amqp.Delivery) error
+
 //Publish publishes a message to a queue
 func (rmq *RabbitMQ) Publish(queue string, body string) error {
 
@@ -311,4 +314,150 @@ func (rmq *RabbitMQ) Consume(ch *amqp.Channel, queue string, name string) (<-cha
 	}
 
 	return msgs, nil
+}
+
+//Consume2
+func (rmq *RabbitMQ) Consume2(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
+
+	var msgs <-chan amqp.Delivery
+
+	//create ch and declare its topology
+	ch, err := rmq.Channel(prefetch, 0, false)
+
+	if err != nil {
+
+		return err
+
+	}
+
+	//declare the queue to avoid NOT FOUND errors
+	_, err = ch.QueueDeclare(
+		qInfo.Name,       // name
+		qInfo.Durable,    // durable
+		qInfo.AutoDelete, // delete when unused
+		qInfo.Exclusive,  // exclusive
+		qInfo.NoWait,     // no-wait
+		qInfo.Args,       // arguments
+	)
+	if err != nil {
+		return err
+	}
+
+	//initialize consumer
+	msgs, err = ch.Consume(
+		qInfo.Name, // queue
+		"",         // consumer
+		false,      // auto-ack
+		false,      // exclusive
+		false,      // no-local
+		false,      // no-wait
+		nil,        // args
+	)
+	if err != nil {
+		return err
+	}
+
+	//wait for messages and
+	for d := range msgs {
+
+		select {
+		default:
+
+			go consumer(d)
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+	}
+
+	return nil
+}
+
+//Publish2 publishes a message to a queue
+func (rmq *RabbitMQ) Publish2(qInfo QueueInfo, body string, headersTable amqp.Table) error {
+
+	//create ch and declare its topology
+	ch, err := rmq.Channel(1, 0, false)
+
+	if err != nil {
+		return err
+
+	}
+	defer ch.Close()
+
+	//declare the queue to avoid NOT FOUND errors
+	_, err = ch.QueueDeclare(
+		qInfo.Name,       // name
+		qInfo.Durable,    // durable
+		qInfo.AutoDelete, // delete when unused
+		qInfo.Exclusive,  // exclusive
+		qInfo.NoWait,     // no-wait
+		qInfo.Args,       // arguments
+	)
+	if err != nil {
+		return err
+	}
+
+	err = ch.Publish(
+		"",         // exchange
+		qInfo.Name, // routing key
+		false,      // mandatory
+		false,      // immediate
+		amqp.Publishing{
+			Headers:     headersTable,
+			ContentType: "text/plain",
+			Body:        []byte(body),
+		})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+//PublishRPC2 publishes a message to a queue using rpc pattern
+func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp.Table, replyTo string, correlationID string) error {
+
+	//create ch and declare its topology
+	ch, err := rmq.Channel(1, 0, false)
+
+	if err != nil {
+		return err
+
+	}
+	defer ch.Close()
+
+	//declare the queue to avoid NOT FOUND errors
+	_, err = ch.QueueDeclare(
+		qInfo.Name,       // name
+		qInfo.Durable,    // durable
+		qInfo.AutoDelete, // delete when unused
+		qInfo.Exclusive,  // exclusive
+		qInfo.NoWait,     // no-wait
+		qInfo.Args,       // arguments
+	)
+	if err != nil {
+		return err
+	}
+
+	err = ch.Publish(
+		"",         // exchange
+		qInfo.Name, // routing key
+		false,      // mandatory
+		false,      // immediate
+		amqp.Publishing{
+			ReplyTo:       replyTo,
+			CorrelationId: correlationID,
+			Headers:       headersTable,
+			ContentType:   "text/plain",
+			Body:          []byte(body),
+		})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
