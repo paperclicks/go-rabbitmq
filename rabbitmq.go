@@ -417,19 +417,46 @@ func (rmq *RabbitMQ) Publish2(qInfo QueueInfo, body string, headersTable amqp.Ta
 	return nil
 }
 
-//PublishRPC2 publishes a message to a queue using rpc pattern
-func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp.Table, replyTo string, correlationID string) error {
+//PublishRPC2 publishes a message using the rpc pattern, and waits for the response in the replyTo queue
+func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp.Table, replyTo string, correlationID string) (amqp.Delivery, error) {
 
-	//create ch and declare its topology
+	var response amqp.Delivery
+
+	//open a channel
 	ch, err := rmq.Channel(1, 0, false)
 
 	if err != nil {
-		return err
-
+		return response, err
 	}
 	defer ch.Close()
 
-	//declare the queue to avoid NOT FOUND errors
+	//declare the replyTo queue and wait for messages (start consuming)
+	replyToQueue, err := ch.QueueDeclare(
+		replyTo, // name
+		false,   // durable
+		true,    // delete when unused
+		false,   // exclusive
+		false,   // no-wait
+		nil,     // arguments
+	)
+	if err != nil {
+		return response, err
+	}
+
+	replyToMessages, err := ch.Consume(
+		replyToQueue.Name, // queue
+		"",                // consumer
+		true,              // auto-ack
+		false,             // exclusive
+		false,             // no-local
+		false,             // no-wait
+		nil,               // args
+	)
+	if err != nil {
+		return response, err
+	}
+
+	//declare the queue where the message will be published, and publish the message
 	_, err = ch.QueueDeclare(
 		qInfo.Name,       // name
 		qInfo.Durable,    // durable
@@ -439,7 +466,7 @@ func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp
 		qInfo.Args,       // arguments
 	)
 	if err != nil {
-		return err
+		return response, err
 	}
 
 	err = ch.Publish(
@@ -456,8 +483,11 @@ func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp
 		})
 
 	if err != nil {
-		return err
+		return response, err
 	}
 
-	return nil
+	//wait for the reply annd return it
+	response = <-replyToMessages
+
+	return response, nil
 }
