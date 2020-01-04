@@ -452,6 +452,14 @@ func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp
 		false,             // no-wait
 		nil,               // args
 	)
+	//delete the reply to queue before exiting
+	defer func() {
+		_, err = ch.QueueDelete(replyToQueue.Name, false, false, false)
+		if err != nil {
+			log.Printf("ERROR: %s", err.Error())
+		}
+	}()
+
 	if err != nil {
 		return response, err
 	}
@@ -489,10 +497,5 @@ func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp
 	//wait for the reply annd return it
 	response = <-replyToMessages
 
-	//delete the reply to queue after the response has been received
-	_, err = ch.QueueDelete(replyToQueue.Name, false, true, false)
-	if err != nil {
-		log.Printf("ERROR: %s", err.Error())
-	}
 	return response, nil
 }
