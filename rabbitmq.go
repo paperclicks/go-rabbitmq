@@ -2,10 +2,7 @@ package rabbitmq
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
-	"time"
 
 	"github.com/streadway/amqp"
 )
@@ -25,6 +22,7 @@ type RabbitMQ struct {
 	connectionCancelFunc context.CancelFunc
 }
 
+//QueueInfo represents the queue info
 type QueueInfo struct {
 	Name       string
 	Durable    bool
@@ -40,178 +38,13 @@ func New(uri string, qInfo map[string]QueueInfo) *RabbitMQ {
 	ctx, cancel := context.WithCancel(context.Background())
 	rmq := &RabbitMQ{URI: uri, Queues: qInfo, ConnectionContext: ctx, connectionCancelFunc: cancel, reconnected: false}
 
-	rmq.connect(uri)
-
-	//launch a goroutine that will listen for messages on ErrorChan and try to reconnect in case of errors
-	go rmq.reconnector()
-
 	return rmq
-}
-
-func (rmq *RabbitMQ) connect(uri string) {
-
-	log.Printf("Connecting to RabbitMQ...")
-
-	for {
-
-		conn, err := amqp.Dial(uri)
-
-		if err == nil {
-
-			//crete the error chan
-			rmq.ErrorChan = make(chan *amqp.Error)
-
-			rmq.Conn = conn
-
-			//notify all close signals on ErrorChan so that a reconnect can be retried
-			rmq.Conn.NotifyClose(rmq.ErrorChan)
-
-			log.Printf("Connection successful.")
-
-			//set reconnected to true so all successive reconnections are not considered as the first connection
-			if !rmq.reconnected {
-				rmq.reconnected = true
-				return
-			}
-
-			//cancel the connection context to notify any listeners
-			rmq.connectionCancelFunc()
-
-			//renew the context after reconnecting
-			ctx, cancel := context.WithCancel(context.Background())
-			rmq.connectionCancelFunc = cancel
-			rmq.ConnectionContext = ctx
-
-			return
-		}
-
-		log.Printf("Failed to connect to %s %v! Retrying in 5s...", uri, err)
-
-		time.Sleep(5000 * time.Millisecond)
-
-	}
-
-}
-
-func (rmq *RabbitMQ) reconnector() {
-	for {
-		err := <-rmq.ErrorChan
-		if !rmq.closed {
-			log.Printf("Reconnecting after connection closed: %v\n", err)
-
-			rmq.connect(rmq.URI)
-		}
-	}
-}
-
-func (rmq *RabbitMQ) Close() {
-
-	log.Println("RabbitMQ closing connection")
-	rmq.closed = true
-	rmq.Conn.Close()
 }
 
 //Consumer is a func type that can be used to process a Delivery
 type Consumer func(d amqp.Delivery) error
 
-//Publish publishes a message to a queue
-func (rmq *RabbitMQ) Publish(queue string, body string) error {
-
-	//create ch and declare its topology
-	ch, err := rmq.Channel(1, 0, false)
-
-	if err != nil {
-		return err
-
-	}
-	defer ch.Close()
-
-	//declare the queue
-	q, err := ch.QueueDeclare(
-		rmq.Queues[queue].Name,       // name
-		rmq.Queues[queue].Durable,    // durable
-		rmq.Queues[queue].AutoDelete, // delete when unused
-		rmq.Queues[queue].Exclusive,  // exclusive
-		rmq.Queues[queue].NoWait,     // no-wait
-		rmq.Queues[queue].Args,       // arguments
-	)
-	if err != nil {
-		return err
-	}
-
-	//publish
-	headersTable := make(amqp.Table)
-
-	headersTable["json"] = true
-
-	err = ch.Publish(
-		"",     // exchange
-		q.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
-		amqp.Publishing{
-			Headers:     headersTable,
-			ContentType: "text/plain",
-			Body:        []byte(body),
-		})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-//PublishRPC publishes a message to a queue using rpc pattern
-func (rmq *RabbitMQ) PublishRPC(queue string, body string, replyTo string, correlationID string) error {
-
-	//create ch and declare its topology
-	ch, err := rmq.Channel(1, 0, false)
-
-	if err != nil {
-		return err
-
-	}
-	defer ch.Close()
-
-	//declare the queue
-	q, err := ch.QueueDeclare(
-		rmq.Queues[queue].Name,       // name
-		rmq.Queues[queue].Durable,    // durable
-		rmq.Queues[queue].AutoDelete, // delete when unused
-		rmq.Queues[queue].Exclusive,  // exclusive
-		rmq.Queues[queue].NoWait,     // no-wait
-		rmq.Queues[queue].Args,       // arguments
-	)
-	if err != nil {
-		return err
-	}
-
-	//publish
-	headersTable := make(amqp.Table)
-
-	headersTable["json"] = true
-
-	err = ch.Publish(
-		"",     // exchange
-		q.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
-		amqp.Publishing{
-			ReplyTo:       replyTo,
-			CorrelationId: correlationID,
-			Headers:       headersTable,
-			ContentType:   "text/plain",
-			Body:          []byte(body),
-		})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
+//Channel creates and returns a new channel
 func (rmq *RabbitMQ) Channel(prefetch int, prefSize int, global bool) (*amqp.Channel, error) {
 
 	//create ch and declare its topology
@@ -235,89 +68,8 @@ func (rmq *RabbitMQ) Channel(prefetch int, prefSize int, global bool) (*amqp.Cha
 	return ch, nil
 }
 
-//Status checks the connection status of RabbitMQ by publishing and then receiving a message from a test queue
-func (rmq *RabbitMQ) Status(queue string) (string, error) {
-
-	//create ch and declare its topology
-	ch, err := rmq.Channel(1, 0, false)
-
-	if err != nil {
-		return "ERROR", err
-	}
-	defer ch.Close()
-
-	//publish a message to test connection queue
-	err = rmq.Publish(queue, "Ping")
-
-	if err != nil {
-		return "ERROR", err
-	}
-
-	//register a consumer to test connection queue
-	testConsumerCH, err := ch.Consume(
-		rmq.Queues[queue].Name, // queue
-		"test-consumer",        // consumer
-		false,                  // auto-ack
-		false,                  // exclusive
-		false,                  // no-local
-		false,                  // no-wait
-		nil,                    // args
-	)
-	if err != nil {
-		return "ERROR", err
-	}
-
-	//Use a select with timout 10s on the channel to check for messages.
-	//if after 10s no messages have been received, return with an error.
-	select {
-	case d := <-testConsumerCH:
-
-		d.Ack(true)
-		return "OK", nil
-
-	case <-time.After(60 * time.Second):
-
-		return "ERROR", errors.New("Rabbit status check timed out after 60 seconds")
-	}
-
-}
-
-func (rmq *RabbitMQ) Consume(ch *amqp.Channel, queue string, name string) (<-chan amqp.Delivery, error) {
-
-	var msgs <-chan amqp.Delivery
-
-	//declare the queue to avoid NOT FOUND errors
-	_, err := ch.QueueDeclare(
-		rmq.Queues[queue].Name,       // name
-		rmq.Queues[queue].Durable,    // durable
-		rmq.Queues[queue].AutoDelete, // delete when unused
-		rmq.Queues[queue].Exclusive,  // exclusive
-		rmq.Queues[queue].NoWait,     // no-wait
-		rmq.Queues[queue].Args,       // arguments
-	)
-	if err != nil {
-		return msgs, err
-	}
-
-	//initialize consumer
-	msgs, err = ch.Consume(
-		rmq.Queues[queue].Name, // queue
-		name,                   // consumer
-		false,                  // auto-ack
-		false,                  // exclusive
-		false,                  // no-local
-		false,                  // no-wait
-		nil,                    // args
-	)
-	if err != nil {
-		return msgs, fmt.Errorf("Failed to register %s: %v", name, err)
-	}
-
-	return msgs, nil
-}
-
-//Consume2
-func (rmq *RabbitMQ) Consume2(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
+//Consume from a queue
+func (rmq *RabbitMQ) Consume(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
 
 	var msgs <-chan amqp.Delivery
 
@@ -374,8 +126,8 @@ func (rmq *RabbitMQ) Consume2(ctx context.Context, qInfo QueueInfo, prefetch int
 	return nil
 }
 
-//Publish2 publishes a message to a queue
-func (rmq *RabbitMQ) Publish2(qInfo QueueInfo, body string, headersTable amqp.Table) error {
+//Publish publishes a message to a queue
+func (rmq *RabbitMQ) Publish(qInfo QueueInfo, body string, headersTable amqp.Table) error {
 
 	//create ch and declare its topology
 	ch, err := rmq.Channel(1, 0, false)
@@ -417,8 +169,8 @@ func (rmq *RabbitMQ) Publish2(qInfo QueueInfo, body string, headersTable amqp.Ta
 	return nil
 }
 
-//PublishRPC2 publishes a message using the rpc pattern, and blocks for the response until the context expires
-func (rmq *RabbitMQ) PublishRPC2(ctx context.Context, publishTo QueueInfo, body string, headersTable amqp.Table, replyTo QueueInfo, correlationID string) (amqp.Delivery, error) {
+//PublishRPC publishes a message using the rpc pattern, and blocks for the response until the context expires
+func (rmq *RabbitMQ) PublishRPC(ctx context.Context, publishTo QueueInfo, body string, headersTable amqp.Table, replyTo QueueInfo, correlationID string) (amqp.Delivery, error) {
 
 	var response amqp.Delivery
 
