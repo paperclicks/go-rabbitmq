@@ -417,13 +417,10 @@ func (rmq *RabbitMQ) Publish2(qInfo QueueInfo, body string, headersTable amqp.Ta
 	return nil
 }
 
-//PublishRPC2 publishes a message using the rpc pattern, and waits for the response in the replyTo queue.
-//The response times out after 300 seconds and the
-func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable amqp.Table, replyTo QueueInfo, correlationID string) (amqp.Delivery, error) {
+//PublishRPC2 publishes a message using the rpc pattern, and blocks for the response until the context expires
+func (rmq *RabbitMQ) PublishRPC2(ctx context.Context, publishTo QueueInfo, body string, headersTable amqp.Table, replyTo QueueInfo, correlationID string) (amqp.Delivery, error) {
 
 	var response amqp.Delivery
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
-	defer cancel()
 
 	//open a channel
 	ch, err := rmq.Channel(1, 0, false)
@@ -495,13 +492,12 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 		select {
 		case response = <-replyToMessages:
 			if response.CorrelationId == correlationID {
-				log.Printf("RPC response: correlationID [%s] response [%#v]", correlationID, response)
 				response.Ack(false)
 				return response, nil
 			}
 		case <-ctx.Done():
 
-			return response, fmt.Errorf("Amqp RPC timed out after %d seconds", 300)
+			return response, fmt.Errorf("Context expired: %s", ctx.Err())
 		}
 	}
 
