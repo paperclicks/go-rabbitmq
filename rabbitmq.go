@@ -494,6 +494,7 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 	select {
 	case response = <-replyToMessages:
 		if response.CorrelationId == correlationID {
+			log.Printf("RPC response: correlationID [%s] response [%#v]", correlationID, response)
 			response.Ack(false)
 			return response, nil
 		}
