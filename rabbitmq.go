@@ -490,18 +490,19 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 		return response, err
 	}
 
-	//wait for a response having the same correlation ID, until the timeout exceeds
-	select {
-	case response = <-replyToMessages:
-		if response.CorrelationId == correlationID {
-			log.Printf("RPC response: correlationID [%s] response [%#v]", correlationID, response)
-			response.Ack(false)
-			return response, nil
-		}
-	case <-ctx.Done():
+	for {
+		//wait for a response having the same correlation ID, until the timeout exceeds
+		select {
+		case response = <-replyToMessages:
+			if response.CorrelationId == correlationID {
+				log.Printf("RPC response: correlationID [%s] response [%#v]", correlationID, response)
+				response.Ack(false)
+				return response, nil
+			}
+		case <-ctx.Done():
 
-		return response, fmt.Errorf("Amqp RPC timed out after %d seconds", 300)
+			return response, fmt.Errorf("Amqp RPC timed out after %d seconds", 300)
+		}
 	}
 
-	return response, nil
 }
