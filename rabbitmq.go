@@ -417,10 +417,13 @@ func (rmq *RabbitMQ) Publish2(qInfo QueueInfo, body string, headersTable amqp.Ta
 	return nil
 }
 
-//PublishRPC2 publishes a message using the rpc pattern, and waits for the response in the replyTo queue
-func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp.Table, replyTo string, correlationID string) (amqp.Delivery, error) {
+//PublishRPC2 publishes a message using the rpc pattern, and waits for the response in the replyTo queue.
+//The response times out after 300 seconds and the
+func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable amqp.Table, replyTo QueueInfo, correlationID string) (amqp.Delivery, error) {
 
 	var response amqp.Delivery
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*300)
+	defer cancel()
 
 	//open a channel
 	ch, err := rmq.Channel(1, 0, false)
@@ -432,12 +435,12 @@ func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp
 
 	//declare the replyTo queue and wait for messages (start consuming)
 	replyToQueue, err := ch.QueueDeclare(
-		replyTo, // name
-		false,   // durable
-		true,    // delete when unused
-		false,   // exclusive
-		false,   // no-wait
-		nil,     // arguments
+		replyTo.Name,       // name
+		replyTo.Durable,    // durable
+		replyTo.AutoDelete, // delete when unused
+		replyTo.Exclusive,  // exclusive
+		replyTo.NoWait,     // no-wait
+		replyTo.Args,       // arguments
 	)
 	if err != nil {
 		return response, err
@@ -445,20 +448,13 @@ func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp
 
 	replyToMessages, err := ch.Consume(
 		replyToQueue.Name, // queue
-		"",                // consumer
-		true,              // auto-ack
+		correlationID,     // consumer
+		false,             // auto-ack
 		false,             // exclusive
 		false,             // no-local
 		false,             // no-wait
 		nil,               // args
 	)
-	//delete the reply to queue before exiting
-	defer func() {
-		_, err = ch.QueueDelete(replyToQueue.Name, false, false, false)
-		if err != nil {
-			log.Printf("ERROR: %s", err.Error())
-		}
-	}()
 
 	if err != nil {
 		return response, err
@@ -466,24 +462,24 @@ func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp
 
 	//declare the queue where the message will be published, and publish the message
 	_, err = ch.QueueDeclare(
-		qInfo.Name,       // name
-		qInfo.Durable,    // durable
-		qInfo.AutoDelete, // delete when unused
-		qInfo.Exclusive,  // exclusive
-		qInfo.NoWait,     // no-wait
-		qInfo.Args,       // arguments
+		publishTo.Name,       // name
+		publishTo.Durable,    // durable
+		publishTo.AutoDelete, // delete when unused
+		publishTo.Exclusive,  // exclusive
+		publishTo.NoWait,     // no-wait
+		publishTo.Args,       // arguments
 	)
 	if err != nil {
 		return response, err
 	}
 
 	err = ch.Publish(
-		"",         // exchange
-		qInfo.Name, // routing key
-		false,      // mandatory
-		false,      // immediate
+		"",             // exchange
+		publishTo.Name, // routing key
+		false,          // mandatory
+		false,          // immediate
 		amqp.Publishing{
-			ReplyTo:       replyTo,
+			ReplyTo:       replyToQueue.Name,
 			CorrelationId: correlationID,
 			Headers:       headersTable,
 			ContentType:   "text/plain",
@@ -494,8 +490,17 @@ func (rmq *RabbitMQ) PublishRPC2(qInfo QueueInfo, body string, headersTable amqp
 		return response, err
 	}
 
-	//wait for the reply annd return it
-	response = <-replyToMessages
+	//wait for a response having the same correlation ID, until the timeout exceeds
+	select {
+	case response = <-replyToMessages:
+		if response.CorrelationId == correlationID {
+			response.Ack(false)
+			return response, nil
+		}
+	case <-ctx.Done():
+
+		return response, fmt.Errorf("Amqp RPC timed out after %d seconds", 300)
+	}
 
 	return response, nil
 }
