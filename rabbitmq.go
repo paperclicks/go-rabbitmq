@@ -426,7 +426,6 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 
 	//open a channel
 	ch, err := rmq.Channel(1, 0, false)
-
 	if err != nil {
 		return response, err
 	}
@@ -486,6 +485,7 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 		})
 
 	if err != nil {
+		ch.Close()
 		return response, err
 	}
 
@@ -495,10 +495,11 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 		case response = <-replyToMessages:
 			if response.CorrelationId == correlationID {
 				response.Ack(false)
+				ch.Close()
 				return response, nil
 			}
 		case <-ctx.Done():
-
+			ch.Close()
 			return response, fmt.Errorf("Context expired: %s", ctx.Err())
 		}
 	}
