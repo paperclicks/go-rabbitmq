@@ -498,6 +498,7 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 				ch.Close()
 				return response, nil
 			}
+			response.Nack(false, true)
 		case <-ctx.Done():
 			ch.Close()
 			return response, fmt.Errorf("Context expired: %s", ctx.Err())
