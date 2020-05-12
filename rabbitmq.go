@@ -374,6 +374,64 @@ func (rmq *RabbitMQ) Consume2(ctx context.Context, qInfo QueueInfo, prefetch int
 	return nil
 }
 
+//ConsumeAutoack consumes and auto acks the delivery
+func (rmq *RabbitMQ) ConsumeAutoack(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
+
+	var msgs <-chan amqp.Delivery
+
+	//create ch and declare its topology
+	ch, err := rmq.Channel(prefetch, 0, false)
+
+	if err != nil {
+
+		return err
+
+	}
+
+	//declare the queue to avoid NOT FOUND errors
+	_, err = ch.QueueDeclare(
+		qInfo.Name,       // name
+		qInfo.Durable,    // durable
+		qInfo.AutoDelete, // delete when unused
+		qInfo.Exclusive,  // exclusive
+		qInfo.NoWait,     // no-wait
+		qInfo.Args,       // arguments
+	)
+	if err != nil {
+		return err
+	}
+
+	//initialize consumer
+	msgs, err = ch.Consume(
+		qInfo.Name, // queue
+		"",         // consumer
+		true,       // auto-ack
+		false,      // exclusive
+		false,      // no-local
+		false,      // no-wait
+		nil,        // args
+	)
+	if err != nil {
+		return err
+	}
+
+	//wait for messages and
+	for d := range msgs {
+
+		select {
+		default:
+
+			go consumer(d)
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+	}
+
+	return nil
+}
+
 //Publish2 publishes a message to a queue
 func (rmq *RabbitMQ) Publish2(qInfo QueueInfo, body string, headersTable amqp.Table) error {
 
