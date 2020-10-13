@@ -316,6 +316,64 @@ func (rmq *RabbitMQ) Consume(ch *amqp.Channel, queue string, name string) (<-cha
 	return msgs, nil
 }
 
+//ConsumeOne consumes 1 message at a time. No new goroutine is launched
+func (rmq *RabbitMQ) ConsumeOne(ctx context.Context, qInfo QueueInfo, consumer Consumer) error {
+
+	var msgs <-chan amqp.Delivery
+
+	//create ch and declare its topology
+	ch, err := rmq.Channel(1, 0, false)
+
+	if err != nil {
+
+		return err
+
+	}
+
+	//declare the queue to avoid NOT FOUND errors
+	_, err = ch.QueueDeclare(
+		qInfo.Name,       // name
+		qInfo.Durable,    // durable
+		qInfo.AutoDelete, // delete when unused
+		qInfo.Exclusive,  // exclusive
+		qInfo.NoWait,     // no-wait
+		qInfo.Args,       // arguments
+	)
+	if err != nil {
+		return err
+	}
+
+	//initialize consumer
+	msgs, err = ch.Consume(
+		qInfo.Name, // queue
+		"",         // consumer
+		false,      // auto-ack
+		false,      // exclusive
+		false,      // no-local
+		false,      // no-wait
+		nil,        // args
+	)
+	if err != nil {
+		return err
+	}
+
+	//wait for messages and
+	for d := range msgs {
+
+		select {
+		default:
+
+			consumer(d)
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+	}
+
+	return nil
+}
+
 //Consume2
 func (rmq *RabbitMQ) Consume2(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
 
