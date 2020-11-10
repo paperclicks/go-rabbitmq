@@ -20,10 +20,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="58454e16-1927-4ef3-98cb-a966671332cc" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/go-rabbitmq.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rabbitmq.go" beforeDir="false" afterPath="$PROJECT_DIR$/rabbitmq.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -36,7 +33,7 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="KubernetesApiPersistence">
-    <option name="context" value="kubernetes-admin@kubernetes-test" />
+    <option name="context" value="production-cluster" />
     <option name="namespace" value="landerlab-test" />
   </component>
   <component name="ProjectId" id="1ipqAYkizAflQQr6D3uuAMIpzYd" />
@@ -69,6 +66,7 @@
         </entry>
       </map>
     </option>
+    <option name="oldMeFiltersMigrated" value="true" />
   </component>
   <component name="VcsManagerConfiguration">
     <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />

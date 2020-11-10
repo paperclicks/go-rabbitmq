@@ -114,41 +114,24 @@ func (rmq *RabbitMQ) Close() {
 //Consumer is a func type that can be used to process a Delivery
 type Consumer func(d amqp.Delivery) error
 
-//Publish publishes a message to a queue
-func (rmq *RabbitMQ) Publish(queue string, body string) error {
+//Publish publishes a message to a queue without trying to assert the queue
+func (rmq *RabbitMQ) Publish(qInfo QueueInfo, body string, headersTable amqp.Table) error {
 
 	//create ch and declare its topology
 	ch, err := rmq.Channel(1, 0, false)
-
 	if err != nil {
 		return err
 
 	}
 	defer ch.Close()
 
-	//declare the queue
-	q, err := ch.QueueDeclare(
-		rmq.Queues[queue].Name,       // name
-		rmq.Queues[queue].Durable,    // durable
-		rmq.Queues[queue].AutoDelete, // delete when unused
-		rmq.Queues[queue].Exclusive,  // exclusive
-		rmq.Queues[queue].NoWait,     // no-wait
-		rmq.Queues[queue].Args,       // arguments
-	)
-	if err != nil {
-		return err
-	}
 
-	//publish
-	headersTable := make(amqp.Table)
-
-	headersTable["json"] = true
 
 	err = ch.Publish(
-		"",     // exchange
-		q.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
+		"",         // exchange
+		qInfo.Name, // routing key
+		false,      // mandatory
+		false,      // immediate
 		amqp.Publishing{
 			Headers:     headersTable,
 			ContentType: "text/plain",
@@ -246,8 +229,11 @@ func (rmq *RabbitMQ) Status(queue string) (string, error) {
 	}
 	defer ch.Close()
 
+	qInfo := QueueInfo{}
+	qInfo.Name=queue
+
 	//publish a message to test connection queue
-	err = rmq.Publish(queue, "Ping")
+	err = rmq.Publish(qInfo, "Ping",amqp.Table{})
 
 	if err != nil {
 		return "ERROR", err
@@ -490,8 +476,8 @@ func (rmq *RabbitMQ) ConsumeAutoack(ctx context.Context, qInfo QueueInfo, prefet
 	return nil
 }
 
-//Publish2 publishes a message to a queue
-func (rmq *RabbitMQ) Publish2(qInfo QueueInfo, body string, headersTable amqp.Table) error {
+//PublishAssert publishes a message to a queue, trying to also asset the queue before publishing
+func (rmq *RabbitMQ) PublishAssert(qInfo QueueInfo, body string, headersTable amqp.Table) error {
 
 	//create ch and declare its topology
 	ch, err := rmq.Channel(1, 0, false)
