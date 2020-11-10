@@ -115,7 +115,7 @@ func (rmq *RabbitMQ) Close() {
 type Consumer func(d amqp.Delivery) error
 
 //Publish publishes a message to a queue without trying to assert the queue
-func (rmq *RabbitMQ) Publish(qInfo QueueInfo, body string, headersTable amqp.Table) error {
+func (rmq *RabbitMQ) Publish(qInfo QueueInfo, publishing amqp.Publishing) error {
 
 	//create ch and declare its topology
 	ch, err := rmq.Channel(1, 0, false)
@@ -132,11 +132,7 @@ func (rmq *RabbitMQ) Publish(qInfo QueueInfo, body string, headersTable amqp.Tab
 		qInfo.Name, // routing key
 		false,      // mandatory
 		false,      // immediate
-		amqp.Publishing{
-			Headers:     headersTable,
-			ContentType: "text/plain",
-			Body:        []byte(body),
-		})
+		publishing)
 
 	if err != nil {
 		return err
@@ -232,8 +228,12 @@ func (rmq *RabbitMQ) Status(queue string) (string, error) {
 	qInfo := QueueInfo{}
 	qInfo.Name=queue
 
+	publishing := amqp.Publishing{}
+	publishing.Body=[]byte("ping")
+	publishing.Headers=amqp.Table{}
+
 	//publish a message to test connection queue
-	err = rmq.Publish(qInfo, "Ping",amqp.Table{})
+	err = rmq.Publish(qInfo, publishing)
 
 	if err != nil {
 		return "ERROR", err
