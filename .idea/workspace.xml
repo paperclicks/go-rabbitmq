@@ -34,7 +34,7 @@
   </component>
   <component name="KubernetesApiPersistence">
     <option name="context" value="production-cluster" />
-    <option name="namespace" value="landerlab-test" />
+    <option name="namespace" value="native-prod" />
   </component>
   <component name="ProjectId" id="1ipqAYkizAflQQr6D3uuAMIpzYd" />
   <component name="ProjectLevelVcsManager">

@@ -608,3 +608,64 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 	}
 
 }
+
+//DoRPC publishes a message using the rpc pattern, and blocks for the response until the context expires
+func (rmq *RabbitMQ) DoRPC(publishTo QueueInfo, publishing amqp.Publishing, timeout time.Duration) (amqp.Delivery, error) {
+
+	var response amqp.Delivery
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	//open a channel
+	ch, err := rmq.Channel(1, 0, false)
+	if err != nil {
+		return response, err
+	}
+	defer ch.Close()
+
+	//open a channel to listen for the response on the reply_to queue
+	responseChan, err := ch.Consume(
+		publishing.ReplyTo, // queue
+		publishing.CorrelationId,     // consumer
+		false,             // auto-ack
+		false,             // exclusive
+		false,             // no-local
+		false,             // no-wait
+		nil,               // args
+	)
+
+	if err != nil {
+		return response, err
+	}
+
+
+	//publish the request
+	err = ch.Publish(
+		"",
+		publishTo.Name,
+		false,
+		false,
+		publishing)
+
+	if err != nil {
+		ch.Close()
+		return response, err
+	}
+
+	for {
+		//wait for a response having the same correlation ID, until the timeout exceeds
+		select {
+		case response = <-responseChan:
+			if response.CorrelationId == publishing.CorrelationId {
+				response.Ack(false)
+				ch.Close()
+				return response, nil
+			}
+			response.Nack(false, true)
+		case <-ctx.Done():
+			ch.Close()
+			return response, fmt.Errorf("context expired for request: %s - error: %s",string(publishing.Body), ctx.Err())
+		}
+	}
+
+}
