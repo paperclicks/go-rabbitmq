@@ -639,6 +639,7 @@ func (rmq *RabbitMQ) DoRPC(queueName string, publishing amqp.Publishing, timeout
 	}
 
 
+
 	//publish the request
 	err = ch.Publish(
 		"",
