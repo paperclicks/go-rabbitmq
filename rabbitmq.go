@@ -610,11 +610,9 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 }
 
 //DoRPC publishes a message using the rpc pattern, and blocks for the response until the context expires
-func (rmq *RabbitMQ) DoRPC(queueName string, publishing amqp.Publishing, timeout time.Duration) (amqp.Delivery, error) {
+func (rmq *RabbitMQ) DoRPC(queueName string, publishing amqp.Publishing, ctx context.Context) (amqp.Delivery, error) {
 
 	var response amqp.Delivery
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 
 	//open a channel
 	ch, err := rmq.Channel(1, 0, false)
