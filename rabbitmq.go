@@ -720,7 +720,7 @@ func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx conte
 
 	//add a new channel to the map to wait for this response
 
-	responseChan := make(chan amqp.Delivery)
+	responseChan := make(chan amqp.Delivery,1)
 	rpcChannelMap[publishing.CorrelationId]=responseChan
 
 	//loop until context expires or we get the wanted response
