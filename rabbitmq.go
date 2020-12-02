@@ -730,7 +730,7 @@ func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx conte
 		case delivery := <-replyToChan:
 
 			rpcChannelMap[delivery.CorrelationId]<-delivery
-			response.Ack(false)
+			delivery.Ack(false)
 
 		//wait for the wanted response and close the channel once we got it
 		case response=<-responseChan:
