@@ -41,8 +41,6 @@ type QueueInfo struct {
 //New creates a new instance of RabbitMQ
 func New(uri string) (*RabbitMQ,error) {
 
-	rpcChannelMap = make(map[string]chan amqp.Delivery)
-
 	conn, err := amqp.Dial(uri)
 
 	if err != nil {
@@ -615,22 +613,34 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 
 }
 
-//DoRPC publishes a message using the rpc pattern, and blocks for the response until the context expires
-func (rmq *RabbitMQ) DoRPC(queueName string, publishing amqp.Publishing, ctx context.Context) (amqp.Delivery, error) {
+//StartRPC starts the RPC process by declaring the reply-to queue and intializing the consuming process from it
+func (rmq *RabbitMQ) StartRPC(queueName string,ctx context.Context)  error {
 
-	var response amqp.Delivery
+	rpcChannelMap = make(map[string]chan amqp.Delivery)
 
-	//open a channel
 	ch, err := rmq.Channel(1, 0, false)
 	if err != nil {
-		return response, err
+		return  err
 	}
 	defer ch.Close()
 
-	//open a channel to listen for the response on the reply_to queue
-	responseChan, err := ch.Consume(
-		publishing.ReplyTo, // queue
-		publishing.CorrelationId,     // consumer
+	_, err = ch.QueueDeclare(
+		queueName, // name
+		true,         // durable
+		true,        // delete when unused
+		true,        // exclusive
+		false,        // no-wait
+		nil,          // arguments
+	)
+	if err != nil {
+		panic(err)
+	}
+
+
+	//start consuming from reply-to
+	replyToChan, err := ch.Consume(
+		queueName, // queue
+		"",
 		false,             // auto-ack
 		false,             // exclusive
 		false,             // no-local
@@ -639,39 +649,33 @@ func (rmq *RabbitMQ) DoRPC(queueName string, publishing amqp.Publishing, ctx con
 	)
 
 	if err != nil {
-		return response, err
+		return  err
 	}
 
 
 
-	//publish the request
-	err = ch.Publish(
-		"",
-		queueName,
-		false,
-		false,
-		publishing)
-
-	if err != nil {
-		ch.Close()
-		return response, err
-	}
-
+	//loop until context expires or we get the wanted response
 	for {
-		//wait for a response having the same correlation ID, until the timeout exceeds
 		select {
-		case response = <-responseChan:
-			if response.CorrelationId == publishing.CorrelationId {
-				response.Ack(false)
-				ch.Close()
-				return response, nil
+		//wait for the next delivery from rabbitmq and add it to the corresponding map element
+		case delivery := <-replyToChan:
+			//if the map entry exists, publish delivery into the map channel, else log an error
+			if _,exists:=rpcChannelMap[delivery.CorrelationId];exists{
+				rpcChannelMap[delivery.CorrelationId]<-delivery
+				delivery.Ack(false)
+			}else{
+				log.Printf("RPC map entry not initialized for correlation id: %s",delivery.CorrelationId)
+
 			}
-			response.Nack(false, true)
+
+
+		//if context expired close the channel
 		case <-ctx.Done():
 			ch.Close()
-			return response, fmt.Errorf("context expired for request: %s - error: %s",string(publishing.Body), ctx.Err())
+			return  ctx.Err()
 		}
 	}
+
 
 }
 
@@ -679,7 +683,11 @@ func (rmq *RabbitMQ) DoRPC(queueName string, publishing amqp.Publishing, ctx con
 ///RPC publishes a message using the rpc pattern, and blocks for the response until the context expires
 func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx context.Context) (amqp.Delivery, error) {
 
+
 	var response amqp.Delivery
+	if rpcChannelMap==nil{
+		return response,fmt.Errorf("RPC map has been not initialised. Make sure to call StartRPC() before using RPC()")
+	}
 
 	//open a channel
 	ch, err := rmq.Channel(1, 0, false)
@@ -687,22 +695,6 @@ func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx conte
 		return response, err
 	}
 	defer ch.Close()
-
-	//open a channel to listen for the response on the reply_to queue
-	replyToChan, err := ch.Consume(
-		publishing.ReplyTo, // queue
-		publishing.CorrelationId,     // consumer
-		false,             // auto-ack
-		false,             // exclusive
-		false,             // no-local
-		false,             // no-wait
-		nil,               // args
-	)
-
-	if err != nil {
-		return response, err
-	}
-
 
 
 	//publish the request
@@ -719,18 +711,12 @@ func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx conte
 	}
 
 	//add a new channel to the map to wait for this response
-
 	responseChan := make(chan amqp.Delivery,1)
 	rpcChannelMap[publishing.CorrelationId]=responseChan
 
 	//loop until context expires or we get the wanted response
 	for {
 		select {
-		//wait for the next delivery from rabbitmq and add it to the corresponding map element
-		case delivery := <-replyToChan:
-
-			rpcChannelMap[delivery.CorrelationId]<-delivery
-			delivery.Ack(false)
 
 		//wait for the wanted response and close the channel once we got it
 		case response=<-responseChan:
