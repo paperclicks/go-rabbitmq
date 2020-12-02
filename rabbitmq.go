@@ -35,19 +35,23 @@ type QueueInfo struct {
 	Args       amqp.Table
 }
 
+
+
+
 //New creates a new instance of RabbitMQ
-func New(uri string, qInfo map[string]QueueInfo) *RabbitMQ {
+func New(uri string) *RabbitMQ {
 
 	rpcChannelMap = make(map[string]chan amqp.Delivery)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	rmq := &RabbitMQ{URI: uri, Queues: qInfo, ConnectionContext: ctx, connectionCancelFunc: cancel, reconnected: false}
+	rmq := &RabbitMQ{URI: uri, ConnectionContext: ctx, connectionCancelFunc: cancel, reconnected: false}
 
+	/*
 	rmq.connect(uri)
 
 	//launch a goroutine that will listen for messages on ErrorChan and try to reconnect in case of errors
 	go rmq.reconnector()
-
+*/
 	return rmq
 }
 
