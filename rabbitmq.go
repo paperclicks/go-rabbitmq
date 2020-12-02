@@ -12,6 +12,7 @@ import (
 
 var conn *amqp.Connection
 var ch *amqp.Channel
+var rpcChannelMap map[string] chan amqp.Delivery
 
 //RabbitMQ is a concrete instance of the package
 type RabbitMQ struct {
@@ -36,6 +37,8 @@ type QueueInfo struct {
 
 //New creates a new instance of RabbitMQ
 func New(uri string, qInfo map[string]QueueInfo) *RabbitMQ {
+
+	rpcChannelMap = make(map[string]chan amqp.Delivery)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	rmq := &RabbitMQ{URI: uri, Queues: qInfo, ConnectionContext: ctx, connectionCancelFunc: cancel, reconnected: false}
@@ -662,6 +665,80 @@ func (rmq *RabbitMQ) DoRPC(queueName string, publishing amqp.Publishing, ctx con
 			}
 			response.Nack(false, true)
 		case <-ctx.Done():
+			ch.Close()
+			return response, fmt.Errorf("context expired for request: %s - error: %s",string(publishing.Body), ctx.Err())
+		}
+	}
+
+}
+
+
+///RPC publishes a message using the rpc pattern, and blocks for the response until the context expires
+func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx context.Context) (amqp.Delivery, error) {
+
+	var response amqp.Delivery
+
+	//open a channel
+	ch, err := rmq.Channel(1, 0, false)
+	if err != nil {
+		return response, err
+	}
+	defer ch.Close()
+
+	//open a channel to listen for the response on the reply_to queue
+	replyToChan, err := ch.Consume(
+		publishing.ReplyTo, // queue
+		publishing.CorrelationId,     // consumer
+		false,             // auto-ack
+		false,             // exclusive
+		false,             // no-local
+		false,             // no-wait
+		nil,               // args
+	)
+
+	if err != nil {
+		return response, err
+	}
+
+
+
+	//publish the request
+	err = ch.Publish(
+		"",
+		queueName,
+		false,
+		false,
+		publishing)
+
+	if err != nil {
+		ch.Close()
+		return response, err
+	}
+
+	//add a new channel to the map to wait for this response
+
+	responseChan := make(chan amqp.Delivery)
+	rpcChannelMap[publishing.CorrelationId]=responseChan
+
+	//loop until context expires or we get the wanted response
+	for {
+		select {
+		//wait for the next delivery from rabbitmq and add it to the corresponding map element
+		case delivery := <-replyToChan:
+
+			rpcChannelMap[delivery.CorrelationId]<-delivery
+			response.Ack(false)
+
+		//wait for the wanted response and close the channel once we got it
+		case response=<-responseChan:
+			if response.CorrelationId == publishing.CorrelationId {
+				delete(rpcChannelMap,publishing.CorrelationId)
+				ch.Close()
+				return response, nil
+			}
+		//if context expired close the channel and remove the entry from the map
+		case <-ctx.Done():
+			delete(rpcChannelMap,publishing.CorrelationId)
 			ch.Close()
 			return response, fmt.Errorf("context expired for request: %s - error: %s",string(publishing.Body), ctx.Err())
 		}

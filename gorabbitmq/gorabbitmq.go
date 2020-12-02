@@ -12,7 +12,6 @@ import (
 
 var conn *amqp.Connection
 var ch *amqp.Channel
-
 //RabbitMQ is a concrete instance of the package
 type RabbitMQ struct {
 	Conn                 *amqp.Connection
