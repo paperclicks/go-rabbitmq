@@ -51,12 +51,6 @@ func New(uri string) (*RabbitMQ,error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	rmq := &RabbitMQ{URI: uri,Conn: conn,ConnectionContext: ctx, connectionCancelFunc: cancel, reconnected: false}
 
-	/*
-	rmq.connect(uri)
-
-	//launch a goroutine that will listen for messages on ErrorChan and try to reconnect in case of errors
-	go rmq.reconnector()
-*/
 	return rmq,nil
 }
 
