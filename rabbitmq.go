@@ -39,12 +39,17 @@ type QueueInfo struct {
 
 
 //New creates a new instance of RabbitMQ
-func New(uri string) *RabbitMQ {
+func New(uri string) (*RabbitMQ,error) {
 
 	rpcChannelMap = make(map[string]chan amqp.Delivery)
 
+	conn, err := amqp.Dial(uri)
+
+	if err != nil {
+		return &RabbitMQ{},err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	rmq := &RabbitMQ{URI: uri, ConnectionContext: ctx, connectionCancelFunc: cancel, reconnected: false}
+	rmq := &RabbitMQ{URI: uri,Conn: conn,ConnectionContext: ctx, connectionCancelFunc: cancel, reconnected: false}
 
 	/*
 	rmq.connect(uri)
@@ -52,7 +57,7 @@ func New(uri string) *RabbitMQ {
 	//launch a goroutine that will listen for messages on ErrorChan and try to reconnect in case of errors
 	go rmq.reconnector()
 */
-	return rmq
+	return rmq,nil
 }
 
 func (rmq *RabbitMQ) connect(uri string) {
