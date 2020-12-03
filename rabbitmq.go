@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -12,8 +13,8 @@ import (
 
 var conn *amqp.Connection
 var ch *amqp.Channel
-var rpcChannelMap map[string]chan amqp.Delivery
-
+var rpcMap map[string]chan amqp.Delivery
+var rpcMapMutex sync.RWMutex
 //RabbitMQ is a concrete instance of the package
 type RabbitMQ struct {
 	Conn                 *amqp.Connection
@@ -611,7 +612,8 @@ func (rmq *RabbitMQ) PublishRPC2(publishTo QueueInfo, body string, headersTable 
 //StartRPC starts the RPC process by declaring the reply-to queue and intializing the consuming process from it
 func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) {
 
-	rpcChannelMap = make(map[string]chan amqp.Delivery)
+	rpcMap = make(map[string]chan amqp.Delivery)
+	rpcMapMutex=sync.RWMutex{}
 
 	ch, err := rmq.Channel(1, 0, false)
 	if err != nil {
@@ -652,9 +654,11 @@ func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) {
 			//wait for the next delivery from rabbitmq and add it to the corresponding map element
 			case delivery := <-replyToChan:
 				//if the map entry exists, publish delivery into the map channel, else log an error
-				if _, exists := rpcChannelMap[delivery.CorrelationId]; exists {
-					rpcChannelMap[delivery.CorrelationId] <- delivery
+				if _, exists := rpcMap[delivery.CorrelationId]; exists {
+					rpcMapMutex.Lock()
+					rpcMap[delivery.CorrelationId] <- delivery
 					delivery.Ack(false)
+					rpcMapMutex.Unlock()
 				} else {
 					log.Printf("ERROR: RPC map entry not initialized for correlation id: %s", delivery.CorrelationId)
 					delivery.Ack(false)
@@ -678,7 +682,7 @@ func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) {
 func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx context.Context) (amqp.Delivery, error) {
 
 	var response amqp.Delivery
-	if rpcChannelMap == nil {
+	if rpcMap == nil {
 		return response, fmt.Errorf("RPC map has been not initialised. Make sure to call StartRPC() before using RPC()")
 	}
 
@@ -704,7 +708,9 @@ func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx conte
 
 	//add a new channel to the map to wait for this response
 	responseChan := make(chan amqp.Delivery, 1)
-	rpcChannelMap[publishing.CorrelationId] = responseChan
+	rpcMapMutex.Lock()
+	rpcMap[publishing.CorrelationId] = responseChan
+	rpcMapMutex.Unlock()
 
 	//loop until context expires or we get the wanted response
 	for {
@@ -713,13 +719,13 @@ func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx conte
 		//wait for the wanted response and close the channel once we got it
 		case response = <-responseChan:
 			if response.CorrelationId == publishing.CorrelationId {
-				delete(rpcChannelMap, publishing.CorrelationId)
+				delete(rpcMap, publishing.CorrelationId)
 				ch.Close()
 				return response, nil
 			}
 		//if context expired close the channel and remove the entry from the map
 		case <-ctx.Done():
-			delete(rpcChannelMap, publishing.CorrelationId)
+			delete(rpcMap, publishing.CorrelationId)
 			ch.Close()
 			return response, fmt.Errorf("context expired for request: %s - error: %s", string(publishing.Body), ctx.Err())
 		}
