@@ -683,7 +683,7 @@ func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx conte
 
 	var response amqp.Delivery
 	if rpcMap == nil {
-		return response, fmt.Errorf("RPC map has been not initialised. Make sure to call StartRPC() before using RPC()")
+		panic(fmt.Errorf("RPC map has been not initialised. Make sure to call StartRPC() before using RPC()"))
 	}
 
 	//open a channel
