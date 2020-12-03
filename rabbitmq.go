@@ -664,6 +664,7 @@ func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) {
 			//if context expired close the channel
 			case <-ctx.Done():
 				ch.Close()
+				return
 			}
 		}
 	}()
