@@ -621,7 +621,7 @@ func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) {
 
 	_, err = ch.QueueDeclare(
 		queueName, // name
-		true,      // durable
+		false,      // durable
 		true,      // delete when unused
 		true,      // exclusive
 		false,     // no-wait
@@ -634,9 +634,9 @@ func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) {
 	//start consuming from reply-to
 	replyToChan, err := ch.Consume(
 		queueName, // queue
-		"",
+		queueName,
 		false, // auto-ack
-		false, // exclusive
+		true, // exclusive
 		false, // no-local
 		false, // no-wait
 		nil,   // args
