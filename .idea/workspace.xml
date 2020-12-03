@@ -58,6 +58,22 @@
     <property name="node.js.selected.package.eslint" value="(autodetect)" />
     <property name="node.js.selected.package.tslint" value="(autodetect)" />
   </component>
+  <component name="RunManager">
+    <configuration name="go build main.go" type="GoApplicationRunConfiguration" factoryName="Go Application" temporary="true" nameIsGenerated="true">
+      <module name="go-rabbitmq" />
+      <working_directory value="$PROJECT_DIR$" />
+      <kind value="FILE" />
+      <filePath value="$PROJECT_DIR$/cmd/main.go" />
+      <package value="github.com/paperclicks/go-rabbitmq" />
+      <directory value="$PROJECT_DIR$" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Go Build.go build main.go" />
+      </list>
+    </recent_temporary>
+  </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
@@ -76,5 +92,60 @@
   </component>
   <component name="VcsManagerConfiguration">
     <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />
+  </component>
+  <component name="WindowStateProjectService">
+    <state width="1398" height="188" key="GridCell.Tab.0.bottom" timestamp="1606991541819">
+      <screen x="0" y="23" width="1440" height="877" />
+    </state>
+    <state width="1398" height="188" key="GridCell.Tab.0.bottom/0.23.1440.877@0.23.1440.877" timestamp="1606991541819" />
+    <state width="1398" height="188" key="GridCell.Tab.0.center" timestamp="1606991541818">
+      <screen x="0" y="23" width="1440" height="877" />
+    </state>
+    <state width="1398" height="188" key="GridCell.Tab.0.center/0.23.1440.877@0.23.1440.877" timestamp="1606991541818" />
+    <state width="1398" height="188" key="GridCell.Tab.0.left" timestamp="1606991541816">
+      <screen x="0" y="23" width="1440" height="877" />
+    </state>
+    <state width="1398" height="188" key="GridCell.Tab.0.left/0.23.1440.877@0.23.1440.877" timestamp="1606991541816" />
+    <state width="1398" height="188" key="GridCell.Tab.0.right" timestamp="1606991541818">
+      <screen x="0" y="23" width="1440" height="877" />
+    </state>
+    <state width="1398" height="188" key="GridCell.Tab.0.right/0.23.1440.877@0.23.1440.877" timestamp="1606991541818" />
+    <state width="1398" height="188" key="GridCell.Tab.1.bottom" timestamp="1606991551948">
+      <screen x="0" y="23" width="1440" height="877" />
+    </state>
+    <state width="1398" height="188" key="GridCell.Tab.1.bottom/0.23.1440.877@0.23.1440.877" timestamp="1606991551948" />
+    <state width="1398" height="188" key="GridCell.Tab.1.center" timestamp="1606991551947">
+      <screen x="0" y="23" width="1440" height="877" />
+    </state>
+    <state width="1398" height="188" key="GridCell.Tab.1.center/0.23.1440.877@0.23.1440.877" timestamp="1606991551947" />
+    <state width="1398" height="188" key="GridCell.Tab.1.left" timestamp="1606991551947">
+      <screen x="0" y="23" width="1440" height="877" />
+    </state>
+    <state width="1398" height="188" key="GridCell.Tab.1.left/0.23.1440.877@0.23.1440.877" timestamp="1606991551947" />
+    <state width="1398" height="188" key="GridCell.Tab.1.right" timestamp="1606991551947">
+      <screen x="0" y="23" width="1440" height="877" />
+    </state>
+    <state width="1398" height="188" key="GridCell.Tab.1.right/0.23.1440.877@0.23.1440.877" timestamp="1606991551947" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/rabbitmq.go</url>
+          <line>658</line>
+          <option name="timeStamp" value="5" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/rabbitmq.go</url>
+          <line>664</line>
+          <option name="timeStamp" value="7" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/rabbitmq.go</url>
+          <line>669</line>
+          <option name="timeStamp" value="9" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>

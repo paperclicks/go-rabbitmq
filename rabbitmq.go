@@ -617,7 +617,6 @@ func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) {
 	if err != nil {
 		panic(err)
 	}
-	defer ch.Close()
 
 	_, err = ch.QueueDeclare(
 		queueName, // name
@@ -646,7 +645,7 @@ func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) {
 		panic(err)
 	}
 
-	go func() {
+	go func(<-chan amqp.Delivery) {
 		//loop until context expires or we get the wanted response
 		for {
 			select {
@@ -663,11 +662,15 @@ func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) {
 
 			//if context expired close the channel
 			case <-ctx.Done():
-				ch.Close()
+				log.Printf("context canceled. Closing RPC channel")
+				err=ch.Close()
+				if err != nil {
+					log.Printf(err.Error())
+				}
 				return
 			}
 		}
-	}()
+	}(replyToChan)
 
 }
 
