@@ -20,6 +20,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="58454e16-1927-4ef3-98cb-a966671332cc" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/go.mod" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/go.sum" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/rabbitmq.go" beforeDir="false" afterPath="$PROJECT_DIR$/rabbitmq.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -93,37 +96,89 @@
     <option name="ADD_EXTERNAL_FILES_SILENTLY" value="true" />
   </component>
   <component name="WindowStateProjectService">
-    <state width="1398" height="245" key="GridCell.Tab.0.bottom" timestamp="1606991665509">
+    <state width="1398" height="217" key="GridCell.Tab.0.bottom" timestamp="1611863315231">
       <screen x="0" y="23" width="1440" height="877" />
     </state>
-    <state width="1398" height="245" key="GridCell.Tab.0.bottom/0.23.1440.877@0.23.1440.877" timestamp="1606991665509" />
-    <state width="1398" height="245" key="GridCell.Tab.0.center" timestamp="1606991665509">
+    <state width="1878" height="401" key="GridCell.Tab.0.bottom/-1920.23.1920.1057/0.23.1920.1057@0.23.1920.1057" timestamp="1611857682642" />
+    <state width="1398" height="217" key="GridCell.Tab.0.bottom/0.23.1440.877@0.23.1440.877" timestamp="1611863315231" />
+    <state width="1398" height="217" key="GridCell.Tab.0.center" timestamp="1611863315230">
       <screen x="0" y="23" width="1440" height="877" />
     </state>
-    <state width="1398" height="245" key="GridCell.Tab.0.center/0.23.1440.877@0.23.1440.877" timestamp="1606991665509" />
-    <state width="1398" height="245" key="GridCell.Tab.0.left" timestamp="1606991665508">
+    <state width="1878" height="401" key="GridCell.Tab.0.center/-1920.23.1920.1057/0.23.1920.1057@0.23.1920.1057" timestamp="1611857682642" />
+    <state width="1398" height="217" key="GridCell.Tab.0.center/0.23.1440.877@0.23.1440.877" timestamp="1611863315230" />
+    <state width="1398" height="217" key="GridCell.Tab.0.left" timestamp="1611863315230">
       <screen x="0" y="23" width="1440" height="877" />
     </state>
-    <state width="1398" height="245" key="GridCell.Tab.0.left/0.23.1440.877@0.23.1440.877" timestamp="1606991665508" />
-    <state width="1398" height="245" key="GridCell.Tab.0.right" timestamp="1606991665509">
+    <state width="1878" height="401" key="GridCell.Tab.0.left/-1920.23.1920.1057/0.23.1920.1057@0.23.1920.1057" timestamp="1611857682641" />
+    <state width="1398" height="217" key="GridCell.Tab.0.left/0.23.1440.877@0.23.1440.877" timestamp="1611863315230" />
+    <state width="1398" height="217" key="GridCell.Tab.0.right" timestamp="1611863315230">
       <screen x="0" y="23" width="1440" height="877" />
     </state>
-    <state width="1398" height="245" key="GridCell.Tab.0.right/0.23.1440.877@0.23.1440.877" timestamp="1606991665509" />
-    <state width="1398" height="245" key="GridCell.Tab.1.bottom" timestamp="1606991665511">
+    <state width="1878" height="401" key="GridCell.Tab.0.right/-1920.23.1920.1057/0.23.1920.1057@0.23.1920.1057" timestamp="1611857682642" />
+    <state width="1398" height="217" key="GridCell.Tab.0.right/0.23.1440.877@0.23.1440.877" timestamp="1611863315230" />
+    <state width="1398" height="217" key="GridCell.Tab.1.bottom" timestamp="1611863289803">
       <screen x="0" y="23" width="1440" height="877" />
     </state>
-    <state width="1398" height="245" key="GridCell.Tab.1.bottom/0.23.1440.877@0.23.1440.877" timestamp="1606991665511" />
-    <state width="1398" height="245" key="GridCell.Tab.1.center" timestamp="1606991665510">
+    <state width="1878" height="401" key="GridCell.Tab.1.bottom/-1920.23.1920.1057/0.23.1920.1057@0.23.1920.1057" timestamp="1611857676152" />
+    <state width="1398" height="217" key="GridCell.Tab.1.bottom/0.23.1440.877@0.23.1440.877" timestamp="1611863289803" />
+    <state width="1398" height="217" key="GridCell.Tab.1.center" timestamp="1611863289798">
       <screen x="0" y="23" width="1440" height="877" />
     </state>
-    <state width="1398" height="245" key="GridCell.Tab.1.center/0.23.1440.877@0.23.1440.877" timestamp="1606991665510" />
-    <state width="1398" height="245" key="GridCell.Tab.1.left" timestamp="1606991665510">
+    <state width="1878" height="401" key="GridCell.Tab.1.center/-1920.23.1920.1057/0.23.1920.1057@0.23.1920.1057" timestamp="1611857676151" />
+    <state width="1398" height="217" key="GridCell.Tab.1.center/0.23.1440.877@0.23.1440.877" timestamp="1611863289798" />
+    <state width="1398" height="217" key="GridCell.Tab.1.left" timestamp="1611863289797">
       <screen x="0" y="23" width="1440" height="877" />
     </state>
-    <state width="1398" height="245" key="GridCell.Tab.1.left/0.23.1440.877@0.23.1440.877" timestamp="1606991665510" />
-    <state width="1398" height="245" key="GridCell.Tab.1.right" timestamp="1606991665510">
+    <state width="1878" height="401" key="GridCell.Tab.1.left/-1920.23.1920.1057/0.23.1920.1057@0.23.1920.1057" timestamp="1611857676151" />
+    <state width="1398" height="217" key="GridCell.Tab.1.left/0.23.1440.877@0.23.1440.877" timestamp="1611863289797" />
+    <state width="1398" height="217" key="GridCell.Tab.1.right" timestamp="1611863289802">
       <screen x="0" y="23" width="1440" height="877" />
     </state>
-    <state width="1398" height="245" key="GridCell.Tab.1.right/0.23.1440.877@0.23.1440.877" timestamp="1606991665510" />
+    <state width="1878" height="401" key="GridCell.Tab.1.right/-1920.23.1920.1057/0.23.1920.1057@0.23.1920.1057" timestamp="1611857676152" />
+    <state width="1398" height="217" key="GridCell.Tab.1.right/0.23.1440.877@0.23.1440.877" timestamp="1611863289802" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/rabbitmq.go</url>
+          <line>205</line>
+          <option name="timeStamp" value="5" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/rabbitmq.go</url>
+          <line>208</line>
+          <option name="timeStamp" value="6" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/cmd/main.go</url>
+          <line>144</line>
+          <option name="timeStamp" value="14" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/cmd/main.go</url>
+          <line>137</line>
+          <option name="timeStamp" value="26" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/rabbitmq.go</url>
+          <line>458</line>
+          <option name="timeStamp" value="38" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/cmd/main.go</url>
+          <line>118</line>
+          <option name="timeStamp" value="45" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/rabbitmq.go</url>
+          <line>70</line>
+          <option name="timeStamp" value="47" />
+        </line-breakpoint>
+      </breakpoints>
+      <default-breakpoints>
+        <breakpoint type="DlvErrorBreakpoint" />
+      </default-breakpoints>
+    </breakpoint-manager>
   </component>
 </project>
