@@ -215,7 +215,7 @@ func (rmq *RabbitMQ) ConsumeOne(ctx context.Context, qInfo QueueInfo, consumer C
 }
 
 //Consume2
-func (rmq *RabbitMQ) Consume2(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
+func (rmq *RabbitMQ) Consume(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
 
 	var msgs <-chan amqp.Delivery
 
