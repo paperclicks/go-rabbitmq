@@ -261,7 +261,7 @@ func (rmq *RabbitMQ) Consume(ctx context.Context, qInfo QueueInfo, prefetch int,
 		select {
 		default:
 
-			go consumer(d)
+			consumer(d)
 
 		case <-ctx.Done():
 			return ctx.Err()
