@@ -3,10 +3,11 @@ package rabbitmq
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/streadway/amqp"
 	"log"
 	"sync"
+
+	"github.com/google/uuid"
+	"github.com/streadway/amqp"
 )
 
 var conn *amqp.Connection
@@ -14,7 +15,7 @@ var ch *amqp.Channel
 var rpcMap map[string]chan amqp.Delivery
 var rpcMapMutex sync.RWMutex
 
-//RabbitMQ is a concrete instance of the package
+// RabbitMQ is a concrete instance of the package
 type RabbitMQ struct {
 	Conn                   *amqp.Connection
 	URI                    string
@@ -34,7 +35,7 @@ type QueueInfo struct {
 	Args       amqp.Table
 }
 
-//New creates a new instance of RabbitMQ
+// New creates a new instance of RabbitMQ
 func New(uri string) (*RabbitMQ, error) {
 
 	conn, err := amqp.Dial(uri)
@@ -92,10 +93,10 @@ func (rmq *RabbitMQ) Close() {
 	rmq.Conn.Close()
 }
 
-//Consumer is a func type that can be used to process a Delivery
+// Consumer is a func type that can be used to process a Delivery
 type Consumer func(d amqp.Delivery) error
 
-//Publish publishes a message to a queue without trying to assert the queue
+// Publish publishes a message to a queue without trying to assert the queue
 func (rmq *RabbitMQ) Publish(qInfo QueueInfo, publishing amqp.Publishing) error {
 
 	select {
@@ -152,7 +153,7 @@ func (rmq *RabbitMQ) Channel(prefetch int, prefSize int, global bool) (*amqp.Cha
 	return ch, nil
 }
 
-//ConsumeOne consumes 1 message at a time. No new goroutine is launched
+// ConsumeOne consumes 1 message at a time. No new goroutine is launched
 func (rmq *RabbitMQ) ConsumeOne(ctx context.Context, qInfo QueueInfo, consumer Consumer) error {
 
 	var msgs <-chan amqp.Delivery
@@ -210,7 +211,7 @@ func (rmq *RabbitMQ) ConsumeOne(ctx context.Context, qInfo QueueInfo, consumer C
 	return nil
 }
 
-//Consume consumes messages in parallel by launching a new goroutine for every new message available
+// Consume consumes messages in parallel by launching a new goroutine for every new message available
 func (rmq *RabbitMQ) Consume(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
 
 	var msgs <-chan amqp.Delivery
@@ -268,7 +269,101 @@ func (rmq *RabbitMQ) Consume(ctx context.Context, qInfo QueueInfo, prefetch int,
 	return nil
 }
 
-//ConsumeAutoack consumes and auto acks the delivery
+// MultiConsume launches "maxConsumers" goroutines to consume messages in parallel
+func (rmq *RabbitMQ) ConsumeMany(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer, maxConsumers int) error {
+
+	if maxConsumers <= 0 {
+		return fmt.Errorf("maxConsumers should be >0")
+	}
+
+	var msgs <-chan amqp.Delivery
+
+	//create ch and declare its topology
+	ch, err := rmq.Channel(prefetch, 0, false)
+
+	if err != nil {
+
+		return err
+
+	}
+
+	//declare the queue to avoid NOT FOUND errors
+	_, err = ch.QueueDeclare(
+		qInfo.Name,       // name
+		qInfo.Durable,    // durable
+		qInfo.AutoDelete, // delete when unused
+		qInfo.Exclusive,  // exclusive
+		qInfo.NoWait,     // no-wait
+		qInfo.Args,       // arguments
+	)
+	if err != nil {
+		return err
+	}
+
+	//initialize consumer
+	msgs, err = ch.Consume(
+		qInfo.Name, // queue
+		"",         // consumer
+		false,      // auto-ack
+		false,      // exclusive
+		false,      // no-local
+		false,      // no-wait
+		nil,        // args
+	)
+	if err != nil {
+		return err
+	}
+
+	//init a chan of size maxConsumers that will control the number of goroutines that can be active at any given time
+	semaphore := make(chan struct{}, maxConsumers)
+
+	//range over messages in the rabbitmq channel
+	for d := range msgs {
+
+		select {
+		default:
+			// blocks if semaphore is full
+			semaphore <- struct{}{}
+			go func(d amqp.Delivery) {
+				consumer(d)
+				//removes 1 element from semaphore so that a new goroutine can be started
+				<-semaphore
+			}(d)
+
+		case <-ctx.Done():
+			return ctx.Err()
+
+		}
+
+	}
+
+	// launch maxConsumers goroutines. Each goroutine executes a consumer which listens for messages in the channel
+	// for i := 0; i < maxConsumers; i++ {
+
+	// 	go func(msgs <-chan amqp.Delivery, ctx context.Context) error {
+
+	// 		//wait for messages and
+	// 		for d := range msgs {
+
+	// 			select {
+	// 			default:
+
+	// 				consumer(d)
+
+	// 			case <-ctx.Done():
+	// 				return ctx.Err()
+
+	// 			}
+
+	// 		}
+	// 		return nil
+	// 	}(msgs, ctx)
+	// }
+
+	return nil
+}
+
+// ConsumeAutoack consumes and auto acks the delivery
 func (rmq *RabbitMQ) ConsumeAutoack(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
 
 	select {
@@ -338,7 +433,7 @@ func (rmq *RabbitMQ) ConsumeAutoack(ctx context.Context, qInfo QueueInfo, prefet
 	return nil
 }
 
-//PublishAssert publishes a message to a queue, trying to also asset the queue before publishing
+// PublishAssert publishes a message to a queue, trying to also asset the queue before publishing
 func (rmq *RabbitMQ) PublishAssert(qInfo QueueInfo, body string, headersTable amqp.Table) error {
 
 	//create ch and declare its topology
@@ -381,9 +476,9 @@ func (rmq *RabbitMQ) PublishAssert(qInfo QueueInfo, body string, headersTable am
 	return nil
 }
 
-//StartRPC starts the RPC process by declaring the reply-to queue and initializing the consuming process from it.
-//RPC responses are added to a map, having the correlation id as key. All consumers interested in a RPC response need
-//to poll this map until their response is available
+// StartRPC starts the RPC process by declaring the reply-to queue and initializing the consuming process from it.
+// RPC responses are added to a map, having the correlation id as key. All consumers interested in a RPC response need
+// to poll this map until their response is available
 func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) error {
 
 	var ch *amqp.Channel
@@ -467,7 +562,7 @@ func (rmq *RabbitMQ) StartRPC(queueName string, ctx context.Context) error {
 	return nil
 }
 
-///RPC publishes a message using the rpc pattern, and blocks for the response until the context expires
+// /RPC publishes a message using the rpc pattern, and blocks for the response until the context expires
 func (rmq *RabbitMQ) RPC(queueName string, publishing amqp.Publishing, ctx context.Context) (amqp.Delivery, error) {
 	var response amqp.Delivery
 
