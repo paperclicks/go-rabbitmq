@@ -337,29 +337,6 @@ func (rmq *RabbitMQ) ConsumeMany(ctx context.Context, qInfo QueueInfo, prefetch 
 
 	}
 
-	// launch maxConsumers goroutines. Each goroutine executes a consumer which listens for messages in the channel
-	// for i := 0; i < maxConsumers; i++ {
-
-	// 	go func(msgs <-chan amqp.Delivery, ctx context.Context) error {
-
-	// 		//wait for messages and
-	// 		for d := range msgs {
-
-	// 			select {
-	// 			default:
-
-	// 				consumer(d)
-
-	// 			case <-ctx.Done():
-	// 				return ctx.Err()
-
-	// 			}
-
-	// 		}
-	// 		return nil
-	// 	}(msgs, ctx)
-	// }
-
 	return nil
 }
 
