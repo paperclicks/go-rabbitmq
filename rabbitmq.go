@@ -95,6 +95,7 @@ func (rmq *RabbitMQ) Close() {
 
 // Consumer is a func type that can be used to process a Delivery
 type Consumer func(d amqp.Delivery) error
+type ConsumerV2 func(d amqp.Delivery, activeConsumers int) error
 
 // Publish publishes a message to a queue without trying to assert the queue
 func (rmq *RabbitMQ) Publish(qInfo QueueInfo, publishing amqp.Publishing) error {
@@ -270,7 +271,7 @@ func (rmq *RabbitMQ) Consume(ctx context.Context, qInfo QueueInfo, prefetch int,
 }
 
 // MultiConsume launches "maxConsumers" goroutines to consume messages in parallel
-func (rmq *RabbitMQ) ConsumeMany(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer, maxConsumers int) error {
+func (rmq *RabbitMQ) ConsumeMany(ctx context.Context, qInfo QueueInfo, prefetch int, consumer ConsumerV2, maxConsumers int) error {
 
 	if maxConsumers <= 0 {
 		return fmt.Errorf("maxConsumers should be >0")
@@ -315,19 +316,19 @@ func (rmq *RabbitMQ) ConsumeMany(ctx context.Context, qInfo QueueInfo, prefetch 
 	}
 
 	//init a chan of size maxConsumers that will control the number of goroutines that can be active at any given time
-	semaphore := make(chan struct{}, maxConsumers)
+	activeConsumers := make(chan struct{}, maxConsumers)
 
 	//range over messages in the rabbitmq channel
 	for d := range msgs {
 
 		select {
 		default:
-			// blocks if semaphore is full
-			semaphore <- struct{}{}
+			// blocks if activeConsumers is full
+			activeConsumers <- struct{}{}
 			go func(d amqp.Delivery) {
-				consumer(d)
-				//removes 1 element from semaphore so that a new goroutine can be started
-				<-semaphore
+				consumer(d, len(activeConsumers))
+				//removes 1 element from activeConsumers so that a new goroutine can be started
+				<-activeConsumers
 			}(d)
 
 		case <-ctx.Done():
