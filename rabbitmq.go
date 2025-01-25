@@ -325,11 +325,11 @@ func (rmq *RabbitMQ) ConsumeMany(ctx context.Context, qInfo QueueInfo, prefetch 
 		default:
 			// blocks if activeConsumers is full
 			activeConsumers <- struct{}{}
-			go func(d amqp.Delivery) {
-				consumer(d, len(activeConsumers))
+			go func(d amqp.Delivery, crrentlyActive int) {
+				consumer(d, crrentlyActive)
 				//removes 1 element from activeConsumers so that a new goroutine can be started
 				<-activeConsumers
-			}(d)
+			}(d, len(activeConsumers))
 
 		case <-ctx.Done():
 			return ctx.Err()
