@@ -288,6 +288,12 @@ func (rmq *RabbitMQ) ConsumeMany(ctx context.Context, qInfo QueueInfo, prefetch 
 
 	}
 
+	var notifyCancel chan string
+	var notifyClose chan *amqp.Error
+
+	ch.NotifyCancel(notifyCancel)
+	ch.NotifyClose(notifyClose)
+
 	//declare the queue to avoid NOT FOUND errors
 	_, err = ch.QueueDeclare(
 		qInfo.Name,       // name
@@ -333,6 +339,10 @@ func (rmq *RabbitMQ) ConsumeMany(ctx context.Context, qInfo QueueInfo, prefetch 
 
 		case <-ctx.Done():
 			return ctx.Err()
+		case cancel := <-notifyCancel:
+			return fmt.Errorf("NotifyCancel triggered: %s", cancel)
+		case close := <-notifyClose:
+			return fmt.Errorf("NotifyClose triggered: %s", close.Error())
 
 		}
 
