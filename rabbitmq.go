@@ -351,6 +351,90 @@ func (rmq *RabbitMQ) ConsumeMany(ctx context.Context, qInfo QueueInfo, prefetch 
 	return nil
 }
 
+// ConsumeManyV2 is an improved version with better channel error handling, and better message consuming flow.
+func (rmq *RabbitMQ) ConsumeManyV2(ctx context.Context, qInfo QueueInfo, prefetch int, consumer ConsumerV2, maxConsumers int) error {
+	if maxConsumers <= 0 {
+		return fmt.Errorf("maxConsumers should be >0")
+	}
+
+	// Create channel and declare its topology
+	ch, err := rmq.Channel(prefetch, 0, false)
+	if err != nil {
+		return err
+	}
+	defer ch.Close() // Ensure channel is closed when function exits
+
+	// Declare queue
+	_, err = ch.QueueDeclare(
+		qInfo.Name,       // name
+		qInfo.Durable,    // durable
+		qInfo.AutoDelete, // delete when unused
+		qInfo.Exclusive,  // exclusive
+		qInfo.NoWait,     // no-wait
+		qInfo.Args,       // arguments
+	)
+	if err != nil {
+		return err
+	}
+
+	// Create consumer
+	msgs, err := ch.Consume(
+		qInfo.Name, // queue
+		"",         // consumer
+		false,      // auto-ack
+		false,      // exclusive
+		false,      // no-local
+		false,      // no-wait
+		nil,        // args
+	)
+	if err != nil {
+		return err
+	}
+
+	// Properly initialize notify channels
+	notifyCancel := make(chan string, 1)
+	notifyClose := make(chan *amqp.Error, 1)
+
+	ch.NotifyCancel(notifyCancel)
+	ch.NotifyClose(notifyClose)
+
+	// Control concurrent workers
+	activeConsumers := make(chan struct{}, maxConsumers)
+
+	// Create a separate goroutine to listen for RabbitMQ events
+	errChan := make(chan error, 1)
+	go func() {
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+		case cancelMsg := <-notifyCancel:
+			errChan <- fmt.Errorf("NotifyCancel triggered: %s", cancelMsg)
+		case closeErr := <-notifyClose:
+			errChan <- fmt.Errorf("NotifyClose triggered: %s", closeErr.Error())
+		}
+	}()
+
+	// Process messages
+	for {
+		select {
+		case d, ok := <-msgs:
+			if !ok {
+				return fmt.Errorf("message channel closed")
+			}
+
+			// Block if activeConsumers is full
+			activeConsumers <- struct{}{}
+			go func(d amqp.Delivery, currentlyActive int) {
+				defer func() { <-activeConsumers }()
+				consumer(d, currentlyActive)
+			}(d, len(activeConsumers))
+
+		case err := <-errChan:
+			return err
+		}
+	}
+}
+
 // ConsumeAutoack consumes and auto acks the delivery
 func (rmq *RabbitMQ) ConsumeAutoack(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
 
@@ -419,6 +503,80 @@ func (rmq *RabbitMQ) ConsumeAutoack(ctx context.Context, qInfo QueueInfo, prefet
 	}
 
 	return nil
+}
+
+// ConsumeAutoackV2 is an improved version with better channel error handling, and better message consuming flow.
+func (rmq *RabbitMQ) ConsumeAutoackV2(ctx context.Context, qInfo QueueInfo, prefetch int, consumer Consumer) error {
+
+	// Create channel
+	ch, err := rmq.Channel(prefetch, 0, false)
+	if err != nil {
+		return err
+	}
+	defer ch.Close() // Ensure channel is closed when function exits
+
+	// Declare queue
+	_, err = ch.QueueDeclare(
+		qInfo.Name,       // name
+		qInfo.Durable,    // durable
+		qInfo.AutoDelete, // delete when unused
+		qInfo.Exclusive,  // exclusive
+		qInfo.NoWait,     // no-wait
+		qInfo.Args,       // arguments
+	)
+	if err != nil {
+		return err
+	}
+
+	// Initialize consumer
+	msgs, err := ch.Consume(
+		qInfo.Name, // queue
+		"",         // consumer
+		true,       // auto-ack
+		false,      // exclusive
+		false,      // no-local
+		false,      // no-wait
+		nil,        // args
+	)
+	if err != nil {
+		return err
+	}
+
+	// Properly initialize notify channels
+	notifyCancel := make(chan string, 1)
+	notifyClose := make(chan *amqp.Error, 1)
+
+	ch.NotifyCancel(notifyCancel)
+	ch.NotifyClose(notifyClose)
+
+	// Create a separate goroutine to monitor connection close events
+	errChan := make(chan error, 1)
+	go func() {
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+		case cancelMsg := <-notifyCancel:
+			errChan <- fmt.Errorf("notifyCancel triggered: %s", cancelMsg)
+		case closeErr := <-notifyClose:
+			errChan <- fmt.Errorf("notifyClose triggered: %s", closeErr.Error())
+		case <-rmq.SignalConnectionClosed:
+			errChan <- fmt.Errorf("connection closed, stopping consumption")
+		}
+	}()
+
+	// Process messages
+	for {
+		select {
+		case d, ok := <-msgs:
+			if !ok {
+				return fmt.Errorf("message channel closed")
+			}
+			consumer(d)
+
+		case err := <-errChan:
+			return err
+		}
+	}
 }
 
 // PublishAssert publishes a message to a queue, trying to also asset the queue before publishing
